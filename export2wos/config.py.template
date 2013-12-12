@@ -1,0 +1,5 @@
+#FTP credentials
+FTP_HOST = 'localhost'
+user = 'anonymous'
+passwd = 'anonymous'
+MONGODB_HOST = 'localhost'
