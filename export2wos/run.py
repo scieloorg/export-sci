@@ -55,7 +55,7 @@ def main(task='add'):
             documents = tools.validated_wos(coll, issn, publication_year=2002)
             xml_file_name = "tmp/xml/SciELO_COR_{0}_{1}.xml".format(now, issn)
         elif task == 'add':
-            documents = tools.update(coll, issn, publication_year=2002)
+            documents = tools.not_sent(coll, issn, publication_year=2002)
             xml_file_name = "tmp/xml/SciELO_{0}_{1}.xml".format(now, issn)
 
         if documents.count() == 0:
