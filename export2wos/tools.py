@@ -27,7 +27,7 @@ def send_to_ftp(file_name,
                 passwd='anonymous'):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    f = open('tmp/{0}'.format(file_name), 'rd')
+    f = open('{0}'.format(file_name), 'rd')
     ftp.storbinary('STOR inbound/{0}'.format(file_name), f)
     f.close()
     ftp.quit()
