@@ -39,17 +39,17 @@ def main(task='add', clean_garbage=False, normalize=True):
 
         norm = Normalization(conversion_table='controller/normalized_country.csv',
                              mongodb_host=config.MONGODB_HOST,
-                             mongodb_port=config.MONGODB_HOST)
+                             mongodb_port=config.MONGODB_PORT)
 
-        norm.bulk_data_fix(fltr,
+        norm.bulk_data_fix({},
                            field='article.v70',
                            subfield='p')
 
         norm = Normalization(conversion_table='controller/normalized_institution.csv',
                              mongodb_host=config.MONGODB_HOST,
-                             mongodb_port=config.MONGODB_HOST)
+                             mongodb_port=config.MONGODB_PORT)
 
-        norm.bulk_data_fix(fltr,
+        norm.bulk_data_fix({},
                            field='article.v70')
 
     if task == 'update':

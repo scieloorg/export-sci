@@ -267,15 +267,14 @@ def include_collection_url_to_journals_metadata(coll_articles, collections):
     regs = coll_articles.find({'collection': {'$exists': 0}}, {'code': 1, 'title': 1})
 
     for reg in regs:
-        if not 'v922' in reg['title']:
+        if not 'v992' in reg['title']:
             continue
 
-        acronym = reg['title']['v922'][0]['_']
+        acronym = reg['title']['v992'][0]['_']
         coll.update({'code': reg['code']},
-                    {'$set': {'title.v690': [{'_': collections[acronym]['domain']],
+                    {'$set': {'title.v690': [{'_': collections[acronym]['domain']}],
                               'collection_url': collections[acronym]['domain'],
-                              'collection': acronym}},
-                    True)
+                              'collection': acronym}})
 
 
 def get_collections_collection(mongodb_host='localhost',
