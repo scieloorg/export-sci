@@ -7,7 +7,6 @@ import config
 from lxml import etree
 
 from normalization import Normalization
-from ftpbroker import FTPServer, Clerk
 
 
 def main(task='add', clean_garbage=False, normalize=True):
