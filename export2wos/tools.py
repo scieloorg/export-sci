@@ -34,12 +34,12 @@ def send_to_ftp(file_name,
 
 
 def send_take_off_files_to_ftp(ftp_host='localhost',
-                                user='anonymous',
-                                passwd='anonymous',
-                                remove_origin=False):
+                               user='anonymous',
+                               passwd='anonymous',
+                               remove_origin=False):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    
+
     for fl in os.listdir('controller'):
         if fl.split('.')[-1] == 'del':
             f = open('controller/{0}'.format(fl), 'rd')
@@ -47,7 +47,7 @@ def send_take_off_files_to_ftp(ftp_host='localhost',
             f.close()
         if remove_origin:
             os.remove('controller/{0}'.format(fl))
-    
+
     ftp.quit()
 
 
@@ -95,10 +95,56 @@ def get_to_update_file_from_ftp(ftp_host='localhost',
     f.close()
 
 
+def get_doi_file_from_ftp(ftp_host='localhost',
+                          user='anonymous',
+                          passwd='anonymous'):
+
+    ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
+    ftp.cwd('controller')
+
+    with open('controller/doi.csv', 'wb') as f:
+        def callback(data):
+            f.write(data)
+        try:
+            ftp.retrbinary('RETR %s' % 'doi.csv', callback)
+        except error_perm:
+            return None
+
+    ftp.quit()
+    f.close()
+
+
+def get_normalization_files_from_ftp(ftp_host='localhost',
+                                     user='anonymous',
+                                     passwd='anonymous'):
+
+    ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
+    ftp.cwd('controller')
+
+    with open('controller/normalized_country.csv', 'wb') as f:
+        def callback(data):
+            f.write(data)
+        try:
+            ftp.retrbinary('RETR %s' % 'normalized_country.csv', callback)
+        except error_perm:
+            return None
+
+    with open('controller/normalized_institution.csv', 'wb') as f:
+        def callback(data):
+            f.write(data)
+        try:
+            ftp.retrbinary('RETR %s' % 'normalized_institution.csv', callback)
+        except error_perm:
+            return None
+
+    ftp.quit()
+    f.close()
+
+
 def get_keep_into_file_from_ftp(ftp_host='localhost',
-                        user='anonymous',
-                        passwd='anonymous',
-                        remove_origin=False):
+                                user='anonymous',
+                                passwd='anonymous',
+                                remove_origin=False):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
     ftp.cwd('controller')
@@ -118,9 +164,9 @@ def get_keep_into_file_from_ftp(ftp_host='localhost',
 
 
 def get_take_off_files_from_ftp(ftp_host='localhost',
-                        user='anonymous',
-                        passwd='anonymous',
-                        remove_origin=False):
+                                user='anonymous',
+                                passwd='anonymous',
+                                remove_origin=False):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
     ftp.cwd('controller')
@@ -141,7 +187,7 @@ def get_take_off_files_from_ftp(ftp_host='localhost',
 
 def load_pids_list_to_be_removed(coll):
 
-    now = datetime.now().isoformat()[0:10].replace('-','')
+    now = datetime.now().isoformat()[0:10].replace('-', '')
 
     recorded_at = 'controller/SCIELO_DEL_{0}.del'.format(now)
 
@@ -161,6 +207,7 @@ def load_pids_list_to_be_removed(coll):
 
     return toremove
 
+
 def sync_validated_xml(coll, remove_origin=False):
 
     with open('controller/validated_ids.txt', 'r') as f:
@@ -175,6 +222,7 @@ def sync_validated_xml(coll, remove_origin=False):
 
     if remove_origin:
         os.remove('controller/validated_ids.txt')
+
 
 def packing_zip(files):
     now = datetime.now().isoformat()[0:10]
@@ -214,10 +262,52 @@ def load_journals_list(journals_file='journals.txt'):
         return None
 
 
-def get_collection(mongodb_host='localhost',
-               mongodb_port=27017,
-               mongodb_database='scielo_network',
-               mongodb_collection='articles'):
+def include_collection_url_to_journals_metadata(coll_articles, collections):
+
+    regs = coll_articles.find({'collection': {'$exists': 0}}, {'code': 1, 'title': 1})
+
+    for reg in regs:
+        if not 'v922' in reg['title']:
+            continue
+
+        acronym = reg['title']['v922'][0]['_']
+        coll.update({'code': reg['code']},
+                    {'$set': {'title.v690': [{'_': collections[acronym]['domain']],
+                              'collection_url': collections[acronym]['domain'],
+                              'collection': acronym}},
+                    True)
+
+
+def get_collections_collection(mongodb_host='localhost',
+                               mongodb_port=27017,
+                               mongodb_database='scielo_network',
+                               mongodb_collection='collections'):
+
+    conn = Connection(mongodb_host, mongodb_port)
+    db = conn[mongodb_database]
+    coll = db[mongodb_collection]
+
+    coll.ensure_index('code')
+
+    return coll
+
+
+def load_collections_metadata(coll):
+
+    collections = coll.find()
+
+    dict_collections = {}
+    for collection in collections:
+        dict_collections.setdefault(collection['code'], collection)
+
+    return dict_collections
+
+
+
+def get_articles_collection(mongodb_host='localhost',
+                            mongodb_port=27017,
+                            mongodb_database='scielo_network',
+                            mongodb_collection='articles'):
 
     conn = Connection(mongodb_host, mongodb_port)
     db = conn[mongodb_database]
@@ -254,18 +344,60 @@ def get_collection(mongodb_host='localhost',
     return coll
 
 
+def load_doi_from_237(coll):
+
+    pids = coll.find({'article.v237': {'$exists': True}},
+                     {'code': 1, 'article.v237': 1})
+    for reg in pids:
+        coll.update({'code': reg['code']},
+                    {'$set': {'article.doi': reg['article']['v237'][0]['_']}})
+
+
+def load_doi_from_file(coll):
+    """
+        load doi from files takes txt files from retrived from the
+        FTP. The FTP files must have lines with <PID>|<DOI>, this text
+        file is generated from the DOI legacy database.
+    """
+    pids_doi = {}
+    with open('controller/doi.csv') as f:
+
+        for line in f:
+            splited = line.split('|')
+            if not len(splited) == 2:
+                continue
+
+            if not len(splited[0]) == 23:
+                continue
+
+            pids_doi[splited[0]] = splited[1].strip()
+
+    regs = coll.find({'article.doi': {'$exists': 0}}, {'code': 1})
+
+    for reg in regs:
+        if reg['code'] in pids_doi:
+            print 'including doi for %s' % reg['code']
+            coll.update({'code': reg['code']}, {'$set': {'article.doi': pids_doi[reg['code']]}})
+
+
 def write_log(article_id, issue_id, schema, xml, msg):
     now = datetime.now().isoformat()[0:10]
-    error_report = open("reports/{0}_{1}_errors.txt".format(issue_id, now), "a")
-    error_msg = "{0}: {1}\r\n".format(article_id, str(schema.get_validation_errors(xml)))
+    error_report = open("reports/{0}_{1}_errors.txt".format(issue_id, now),
+                        "a")
+    error_msg = "{0}: {1}\r\n".format(article_id,
+                                      str(schema.get_validation_errors(xml)))
     error_report.write(error_msg)
     error_report.close()
 
 
-def validate_xml(coll, article_id, issue_id, api_host='localhost', api_port='7000'):
+def validate_xml(coll,
+                 article_id,
+                 issue_id,
+                 api_host='localhost',
+                 api_port='7000'):
     """
-    Validate article agains WOS Schema. Flaging his attribute validated_scielo to True if
-    the document is valid.
+    Validate article agains WOS Schema. Flaging his attribute validated_scielo
+    to True if the document is valid.
     """
     xsd = open('ThomsonReuters_publishing.xsd', 'r').read()
     sch = Schema(xsd)
@@ -287,7 +419,8 @@ def validate_xml(coll, article_id, issue_id, api_host='localhost', api_port='700
         return None
 
     if result:
-        coll.update({'code': article_id}, {'$set': {'validated_scielo': 'True'}})
+        coll.update({'code': article_id},
+                    {'$set': {'validated_scielo': 'True'}})
         return xml
     else:
         msg = ""
@@ -313,10 +446,10 @@ def find(fltr, collection, skip, limit):
 
 
 def not_send(collection,
-                  code_title=None,
-                  publication_year=1800,
-                  skip=0,
-                  limit=10000):
+             code_title=None,
+             publication_year=1800,
+             skip=0,
+             limit=10000):
     """
     Implements an iterable article PID list not validated on SciELO.
     validated_scielo = False
@@ -360,7 +493,7 @@ def sent_to_wos(collection,
                 skip=0,
                 limit=10000):
     """
-    Implements an iterable article PID list cotaining docs already sento to wos.
+    Implements an iterable article PID list cotaining docs already sent to wos.
     sent_wos = True
     """
 
@@ -374,12 +507,12 @@ def sent_to_wos(collection,
 
 
 def validated_wos(collection,
-                code_title=None,
-                publication_year=1800,
-                skip=0,
-                limit=10000):
+                  code_title=None,
+                  publication_year=1800,
+                  skip=0,
+                  limit=10000):
     """
-    Implements an iterable article PID list cotaining docs already sento to wos.
+    Implements an iterable article PID list cotaining docs already sent to wos.
     sent_wos = True
     """
 
