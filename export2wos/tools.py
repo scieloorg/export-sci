@@ -45,8 +45,9 @@ def send_take_off_files_to_ftp(ftp_host='localhost',
             f = open('controller/{0}'.format(fl), 'rd')
             ftp.storbinary('STOR inbound/{0}'.format(fl), f)
             f.close()
+
         if remove_origin:
-            os.remove('controller/{0}'.format(fl))
+            os.sytems('rm pf controller/*.del')
 
     ftp.quit()
 
