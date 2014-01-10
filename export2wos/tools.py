@@ -47,7 +47,7 @@ def send_take_off_files_to_ftp(ftp_host='localhost',
             f.close()
 
         if remove_origin:
-            os.systems('rm -f controller/*.del')
+            os.system('rm -f controller/*.del')
 
     ftp.quit()
 
