@@ -21,6 +21,15 @@ def main(task='add', clean_garbage=False, normalize=True):
 
     collections = tools.load_collections_metadata(coll_collections)
 
+    if clean_garbage:
+        print "Removing previous XML files"
+        os.system('rm -f tmp/xml/*.xml')
+        print "Removing previous zip files"
+        os.system('rm -f tmp/*.zip')
+        print "Removing previous error report files"
+        os.system('rm -f report/*errors.txt')
+
+
     print "Including collections url to journals metadata"
     tools.include_collection_url_to_journals_metadata(coll_articles,
                                                       collections)
@@ -44,12 +53,16 @@ def main(task='add', clean_garbage=False, normalize=True):
                            field='article.v70',
                            subfield='p')
 
+
         norm = Normalization(conversion_table='controller/normalized_institution.csv',
                              mongodb_host=config.MONGODB_HOST,
                              mongodb_port=config.MONGODB_PORT)
 
         norm.bulk_data_fix({},
                            field='article.v70')
+
+        print "Removing previous error report files"
+        os.system('mv notfound* controller/')
 
     if task == 'update':
         print "Loading toupdate.txt ISSN's file from FTP controller directory"
@@ -168,13 +181,17 @@ if __name__ == "__main__":
                         help='Task that will be executed.')
     parser.add_argument('-c',
                         '--clean_garbage',
+                        action='store_true',
                         default=False,
-                        choices=[True, False],
                         help='Remove processed files from FTP.')
     parser.add_argument('-n',
                         '--normalize',
-                        default=True,
-                        choices=[True, False],
+                        action='store_true',
+                        default=False,
                         help='Run normalization processing.')
+
     args = parser.parse_args()
-    main(task=args.task, clean_garbage=args.clean_garbage)
+
+    main(task=str(args.task),
+         clean_garbage=bool(args.clean_garbage),
+         normalize=bool(args.normalize))
