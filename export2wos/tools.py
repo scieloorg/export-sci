@@ -26,9 +26,13 @@ def send_to_ftp(file_name,
                 user='anonymous',
                 passwd='anonymous'):
 
+    now = datetime.now().isoformat()[0:10]
+
+    target = 'scielo_{0}.zip'.format(now)
+
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
     f = open('{0}'.format(file_name), 'rd')
-    ftp.storbinary('STOR inbound/{0}'.format(file_name), f)
+    ftp.storbinary('STOR inbound/{0}'.format(target), f)
     f.close()
     ftp.quit()
 
