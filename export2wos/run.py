@@ -108,6 +108,9 @@ def main(task='add', clean_garbage=False, normalize=True):
     print "Update doi numbers according to text files"
     tools.load_doi_from_file(coll_articles)
 
+    print "Defining document types elegible to send to SCI"
+    tools.set_elegible_document_types(coll_articles)
+
     # Loading XML files
     for issn in issns:
         index_issn = index_issn + 1
