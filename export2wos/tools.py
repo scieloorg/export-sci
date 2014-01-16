@@ -10,6 +10,10 @@ from pymongo import Connection
 from porteira.porteira import Schema
 from lxml import etree
 
+# SciELO article types stored in field v71 that are allowed to be sent to WoS
+wos_article_types = ['rc', 'ab', 'co', 'ed', 'in', 'tr', 'up', 'oa', 'an',
+                     'ax', 'mt', 'le', 'ra', 'nd', 'cr', 'sc', 'pv', 'rn']
+
 
 def ftp_connect(ftp_host='localhost',
                 user='anonymous',
@@ -345,6 +349,19 @@ def get_articles_collection(mongodb_host='localhost',
     coll.ensure_index('article.doi')
 
     return coll
+
+
+def set_elegible_document_types(coll):
+    pids = coll.find({'applicable': 'False'}, {'code': 1, 'article.v71': 1})
+
+    for reg in pids:
+
+        if not 'v71' in reg['article']:
+            continue
+
+        if reg['article']['v71'][0]['_'] in wos_article_types:
+            coll.update({'code': reg['code']},
+                        {'$set': {'applicable': 'True'}})
 
 
 def load_doi_from_237(coll):
