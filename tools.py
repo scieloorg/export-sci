@@ -279,7 +279,7 @@ def include_collection_url_to_journals_metadata(coll_articles, collections):
             continue
 
         acronym = reg['title']['v992'][0]['_']
-        coll.update({'code': reg['code']},
+        coll_articles.update({'code': reg['code']},
                     {'$set': {'title.v690': [{'_': collections[acronym]['domain']}],
                               'collection_url': collections[acronym]['domain'],
                               'collection': acronym}})
@@ -419,12 +419,16 @@ def validate_xml(coll,
     Validate article agains WOS Schema. Flaging his attribute validated_scielo
     to True if the document is valid.
     """
-    xsd = open('ThomsonReuters_publishing.xsd', 'r').read()
+    xsd = open('xsd/ThomsonReuters_publishing.xsd', 'r').read()
     sch = Schema(xsd)
 
-    xml_url = 'http://{0}:{1}/api/v1/article?code={2}&format=xml&show_citation=True'.format(api_host, api_port, article_id)
+    xml_url = 'http://{0}:{1}/api/v1/article?code={2}&format=xmlwos'.format(api_host, api_port, article_id)
 
-    xml = urllib2.urlopen(xml_url, timeout=30).read()
+    try:
+        xml = urllib2.urlopen(xml_url, timeout=30).read()
+    except:
+        print 'error loading: %s' % xml_url
+        return None
 
     try:
         result = sch.validate(xml)

@@ -29,7 +29,6 @@ def main(task='add', clean_garbage=False, normalize=True):
         print "Removing previous error report files"
         os.system('rm -f report/*errors.txt')
 
-
     print "Including collections url to journals metadata"
     tools.include_collection_url_to_journals_metadata(coll_articles,
                                                       collections)
