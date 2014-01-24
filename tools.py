@@ -279,7 +279,7 @@ def include_collection_url_to_journals_metadata(coll_articles, collections):
             continue
 
         acronym = reg['title']['v992'][0]['_']
-        coll.update({'code': reg['code']},
+        coll_articles.update({'code': reg['code']},
                     {'$set': {'title.v690': [{'_': collections[acronym]['domain']}],
                               'collection_url': collections[acronym]['domain'],
                               'collection': acronym}})
