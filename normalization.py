@@ -5,6 +5,7 @@ import codecs
 import argparse
 import string
 import unicodedata
+import json
 
 from pymongo import Connection
 from pymongo.errors import AutoReconnect
@@ -63,7 +64,10 @@ class Normalization(object):
 
         return convt
 
-    def _load_records(self, field, fltr={}):
+    def _load_records(self, field, fltr=None):
+
+        fltr = fltr or {}
+
         records = self._coll.find(fltr, {'code': 1})
         codes = []
         for record in records:
@@ -73,10 +77,11 @@ class Normalization(object):
             yield self._coll.find_one({'code': code}, {'code': 1, field: 1})
 
     def bulk_data_fix(self,
-                      fltr={},
+                      fltr=None,
                       field=None,
                       subfield='_',
                       write_into=None):
+
         """
         This method is responsible to replace the values of the field/subfield
         given according to the conversion_table:
@@ -89,6 +94,8 @@ class Normalization(object):
         named by the write_into parameter, otherwise the normalization will
         replace the value in the original subfield.
         """
+
+        fltr = fltr or {}
 
         if not write_into:
             write_into = subfield

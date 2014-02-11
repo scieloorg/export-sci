@@ -40,6 +40,9 @@ def main(task='add', clean_garbage=False, normalize=True):
 
     if normalize:
         print "Downloading normalized names for countries and institutions"
+        print "Removing previous error report files"
+        os.system('mv notfound* controller/')
+
         tools.get_normalization_files_from_ftp(ftp_host=config.FTP_HOST,
                                                user=config.FTP_USER,
                                                passwd=config.FTP_PASSWD)
@@ -48,20 +51,21 @@ def main(task='add', clean_garbage=False, normalize=True):
                              mongodb_host=config.MONGODB_HOST,
                              mongodb_port=config.MONGODB_PORT)
 
-        norm.bulk_data_fix({},
-                           field='article.v70',
+        norm.bulk_data_fix(field='article.v70',
                            subfield='p')
-
 
         norm = Normalization(conversion_table='controller/normalized_institution.csv',
                              mongodb_host=config.MONGODB_HOST,
                              mongodb_port=config.MONGODB_PORT)
 
-        norm.bulk_data_fix({},
-                           field='article.v70')
+        norm.bulk_data_fix(field='article.v70')
 
-        print "Removing previous error report files"
-        os.system('mv notfound* controller/')
+        norm = Normalization(conversion_table='controller/normalized_country_by_institution.csv',
+                             mongodb_host=config.MONGODB_HOST,
+                             mongodb_port=config.MONGODB_PORT)
+
+        norm.bulk_data_fix(field='article.v70',
+                           write_into='p')
 
     if task == 'update':
         print "Loading toupdate.txt ISSN's file from FTP controller directory"
