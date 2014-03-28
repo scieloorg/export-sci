@@ -145,6 +145,14 @@ def get_normalization_files_from_ftp(ftp_host='localhost',
         except error_perm:
             return None
 
+    with open('controller/normalized_country_by_institution.csv', 'wb') as f:
+        def callback(data):
+            f.write(data)
+        try:
+            ftp.retrbinary('RETR %s' % 'normalized_country_by_institution.csv', callback)
+        except error_perm:
+            return None
+
     ftp.quit()
     f.close()
 
