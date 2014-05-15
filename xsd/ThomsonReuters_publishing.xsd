@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- edited with XMLSpy v2005 rel. 3 U (http://www.altova.com) by Roberta Seich (Thomson ISI) -->
 <!-- CONFIDENTIAL Thomson Reuters 2013 -->
 <!-- Based in part on, but not fully compatible with, the NLM Journal Archiving and Interchange Tag Suite. -->
 <!-- Version 1.09 -->
@@ -2980,9 +2981,9 @@
 							<xs:enumeration value="SciELO Spain"/>
 							<xs:enumeration value="SciELO Mexico"/>
 							<xs:enumeration value="SciELO Portugal"/>
-							<xs:enumeration value="SciELO Peru"/>
 							<xs:enumeration value="SciELO South Africa"/>
 							<xs:enumeration value="SciELO Venezuela"/>
+							<xs:enumeration value="SciELO Peru"/>
 						</xs:restriction>
 					</xs:simpleType>
 				</xs:element>
@@ -4626,7 +4627,7 @@
 			<xs:attribute name="glyph-data" type="xs:IDREF"/>
 		</xs:complexType>
 	</xs:element>
-	<xs:attribute name="dtd-version" default="1.08">
+	<xs:attribute name="dtd-version" default="1.09">
 		<xs:simpleType>
 			<xs:restriction base="xs:string">
 				<xs:enumeration value="1.04"/>

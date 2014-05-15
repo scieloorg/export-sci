@@ -157,8 +157,8 @@ def main(task='add', clean_garbage=False, normalize=True):
                 xml_file = open(xml_file_name, 'w')
                 xml_file.write('<articles xmlns:xlink="http://www.w3.org/1999/xlink" '\
                                'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '\
-                               'xsi:noNamespaceSchemaLocation="ThomsonReuters_publishing_1.06.xsd" '\
-                               'dtd-version="1.06">')
+                               'xsi:noNamespaceSchemaLocation="ThomsonReuters_publishing_1.09.xsd" '\
+                               'dtd-version="1.09">')
                 xml_file.write(xmlr)
                 xml_file.write("</articles>")
                 xml_file.close()
