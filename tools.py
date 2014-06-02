@@ -14,6 +14,8 @@ from lxml import etree
 wos_article_types = ['rc', 'ab', 'co', 'ed', 'in', 'tr', 'up', 'oa', 'an',
                      'ax', 'mt', 'le', 'ra', 'nd', 'cr', 'sc', 'pv', 'rn']
 
+wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 'sza', 'prt', 'cri', 'per', 'mex']
+
 
 def ftp_connect(ftp_host='localhost',
                 user='anonymous',
@@ -318,7 +320,6 @@ def load_collections_metadata(coll):
     return dict_collections
 
 
-
 def get_articles_collection(mongodb_host='localhost',
                             mongodb_port=27017,
                             mongodb_database='scielo_network',
@@ -349,6 +350,7 @@ def get_articles_collection(mongodb_host='localhost',
     coll.ensure_index('code_title')
     coll.ensure_index('code_issue')
     coll.ensure_index('applicable')
+    coll.ensure_index('collection')
     coll.ensure_index('article_title_md5')
     coll.ensure_index('article_title_no_accents')
     coll.ensure_index('citations_title_no_accents')
@@ -490,6 +492,7 @@ def not_send(collection,
 
     fltr = {'sent_wos': 'False',
             'applicable': 'True',
+            'collection': {'$in': wos_collections_allowed},
             'publication_year': {'$gte': str(publication_year)}}
 
     if code_title:
