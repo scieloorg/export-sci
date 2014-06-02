@@ -52,10 +52,10 @@ class Normalization(object):
 
         convt = {}
         for key in f:
-            if key:
+            if key.strip() != '':
                 skey = key.split('|')
                 if len(skey) != 2:
-                    raise ValueError('Some values ({0}) in the conversion table are invalid. Each line must have 2 values separeted with |'.format(key))
+                    raise ValueError('Some values ({0}) in the conversion table ({1}) are invalid. Each line must have 2 values separeted with |'.format(key, coversion_table))
                 convt[remove_accents(skey[1].strip().lower())] = skey[1].strip()
                 convt[remove_accents(skey[0].strip())] = skey[1].strip()
 
