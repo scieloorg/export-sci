@@ -217,9 +217,9 @@ def load_pids_list_to_be_removed(coll):
             toremove.append(sline)
             if len(sline) == 9:
                 for reg in coll.find({'code_title': sline}, {'code': 1}):
-                    f.write('SCIELO|{0}|Y\r\n'.format(reg['code']))
+                    f.write('SCIELO,{0},Y\r\n'.format(reg['code']))
             else:
-                f.write('SCIELO|{0}|Y\r\n'.format(sline))
+                f.write('SCIELO,{0},Y\r\n'.format(sline))
 
         f.close()
 
