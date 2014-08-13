@@ -356,7 +356,7 @@ def get_articles_collection(mongodb_host='localhost',
     coll.ensure_index('citations_title_no_accents')
     coll.ensure_index('article_title_author_year_no_accents')
     coll.ensure_index('citations_title_author_year_no_accents')
-    coll.ensure_index('article.doi')
+    coll.ensure_index('doi')
 
     return coll
 
@@ -380,7 +380,7 @@ def load_doi_from_237(coll):
                      {'code': 1, 'article.v237': 1})
     for reg in pids:
         coll.update({'code': reg['code']},
-                    {'$set': {'article.doi': reg['article']['v237'][0]['_']}})
+                    {'$set': {'doi': reg['article']['v237'][0]['_']}})
 
 
 def load_doi_from_file(coll):
@@ -402,12 +402,12 @@ def load_doi_from_file(coll):
 
             pids_doi[splited[0]] = splited[1].strip()
 
-    regs = coll.find({'article.doi': {'$exists': 0}}, {'code': 1})
+    regs = coll.find({'doi': {'$exists': 0}}, {'code': 1})
 
     for reg in regs:
         if reg['code'] in pids_doi:
             print 'including doi for %s' % reg['code']
-            coll.update({'code': reg['code']}, {'$set': {'article.doi': pids_doi[reg['code']]}})
+            coll.update({'code': reg['code']}, {'$set': {'doi': pids_doi[reg['code']]}})
 
 
 def write_log(article_id, issue_id, schema, xml, msg):
