@@ -11,8 +11,9 @@ from porteira.porteira import Schema
 from lxml import etree
 
 # SciELO article types stored in field v71 that are allowed to be sent to WoS
-wos_article_types = ['rc', 'ab', 'co', 'ed', 'in', 'tr', 'up', 'oa', 'an',
-                     'ax', 'mt', 'le', 'ra', 'nd', 'cr', 'sc', 'pv', 'rn']
+wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
+                     'le', 'mt', 'nd', 'oa', 'pr', 'pv', 'rc', 'rn', 'ra',
+                     'sc', 'tr', 'up']
 
 wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 'sza', 'prt', 'cri', 'per', 'mex']
 
