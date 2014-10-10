@@ -285,6 +285,8 @@ def include_collection_url_to_journals_metadata(coll_articles, collections):
 
     regs = coll_articles.find({'collection': {'$exists': 0}}, {'code': 1, 'title': 1})
 
+    import pdb; pdb.set_trace()
+
     for reg in regs:
         if not 'v992' in reg['title']:
             continue
@@ -424,8 +426,8 @@ def write_log(article_id, issue_id, schema, xml, msg):
 def validate_xml(coll,
                  article_id,
                  issue_id,
-                 api_host='localhost',
-                 api_port='7000'):
+                 api_host='articlemeta.scielo.org',
+                 api_port='80'):
     """
     Validate article agains WOS Schema. Flaging his attribute validated_scielo
     to True if the document is valid.
