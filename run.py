@@ -147,7 +147,7 @@ def main(task='add', clean_garbage=False, normalize=True):
                 xml = tools.validate_xml(coll_articles,
                                          document['code'],
                                          issn,
-                                         api_host=config.MONGODB_HOST)
+                                         api_host='articlemeta.scielo.org')
                 if xml:
                     parser = etree.XMLParser(remove_blank_text=True)
                     root = etree.fromstring(xml, parser)
