@@ -251,7 +251,7 @@ def packing_zip(files):
 
     target = 'tmp/scielo_{0}.zip'.format(now)
 
-    with zipfile.ZipFile(target, 'w') as zipf:
+    with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zipf:
         for xml_file in files:
             zipf.write('tmp/xml/{0}'.format(xml_file), arcname=xml_file)
 
