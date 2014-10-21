@@ -285,8 +285,6 @@ def include_collection_url_to_journals_metadata(coll_articles, collections):
 
     regs = coll_articles.find({'collection': {'$exists': 0}}, {'code': 1, 'title': 1})
 
-    import pdb; pdb.set_trace()
-
     for reg in regs:
         if not 'v992' in reg['title']:
             continue
