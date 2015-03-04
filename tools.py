@@ -352,11 +352,6 @@ def get_articles_collection(mongodb_host='localhost',
     coll.ensure_index('code_issue')
     coll.ensure_index('applicable')
     coll.ensure_index('collection')
-    coll.ensure_index('article_title_md5')
-    coll.ensure_index('article_title_no_accents')
-    coll.ensure_index('citations_title_no_accents')
-    coll.ensure_index('article_title_author_year_no_accents')
-    coll.ensure_index('citations_title_author_year_no_accents')
     coll.ensure_index('doi')
 
     return coll
@@ -487,8 +482,7 @@ def not_send(collection,
              limit=10000):
     """
     Implements an iterable article PID list not validated on SciELO.
-    validated_scielo = False
-    sent_to_wos = False
+    sent_wos = False
     """
 
     fltr = {'sent_wos': 'False',
@@ -510,7 +504,7 @@ def validated(collection,
     """
     Implements an iterable article PID list eligible to be send to WoS.
     validated_scielo = True
-    sent_to_wos = False
+    sent_wos = False
     """
 
     fltr = {'sent_wos': 'True',
