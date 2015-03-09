@@ -1,12 +1,40 @@
 from datetime import datetime
 import os
 import argparse
+import logging
 
 import tools
 import config
 from lxml import etree
 
 from normalization import Normalization
+
+def _config_logging(logging_level='INFO', logging_file=None):
+
+    allowed_levels = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
+    }
+
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    logger = logging.getLogger('export_scl')
+    logger.setLevel(allowed_levels.get(logging_level, 'INFO'))
+
+    if logging_file:
+        hl = logging.FileHandler(logging_file, mode='a')
+    else:
+        hl = logging.StreamHandler()
+
+    hl.setFormatter(formatter)
+    hl.setLevel(allowed_levels.get(logging_level, 'INFO'))
+
+    logger.addHandler(hl)
+
+    return logger
 
 
 def main(task='add', clean_garbage=False, normalize=True):
@@ -22,25 +50,25 @@ def main(task='add', clean_garbage=False, normalize=True):
     collections = tools.load_collections_metadata(coll_collections)
 
     if clean_garbage:
-        print "Removing previous XML files"
+        logger.debug("Removing previous XML files")
         os.system('rm -f tmp/xml/*.xml')
-        print "Removing previous zip files"
+        logger.debug("Removing previous zip files")
         os.system('rm -f tmp/*.zip')
-        print "Removing previous error report files"
+        logger.debug("Removing previous error report files")
         os.system('rm -f report/*errors.txt')
 
-    print "Including collections url to journals metadata"
+    logger.debug("Including collections url to journals metadata")
     tools.include_collection_url_to_journals_metadata(coll_articles,
                                                       collections)
 
-    print "Downloading doi file from ftp"
+    logger.debug("Downloading doi file from ftp")
     tools.get_doi_file_from_ftp(ftp_host=config.FTP_HOST,
                                 user=config.FTP_USER,
                                 passwd=config.FTP_PASSWD)
 
     if normalize:
-        print "Downloading normalized names for countries and institutions"
-        print "Removing previous error report files"
+        logger.debug("Downloading normalized names for countries and institutions")
+        logger.debug("Removing previous error report files")
         os.system('mv notfound* controller/')
 
         tools.get_normalization_files_from_ftp(ftp_host=config.FTP_HOST,
@@ -68,7 +96,7 @@ def main(task='add', clean_garbage=False, normalize=True):
                            write_into='p')
 
     if task == 'update':
-        print "Loading toupdate.txt ISSN's file from FTP controller directory"
+        logger.debug("Loading toupdate.txt ISSN's file from FTP controller directory")
         tools.get_to_update_file_from_ftp(ftp_host=config.FTP_HOST,
                                           user=config.FTP_USER,
                                           passwd=config.FTP_PASSWD)
@@ -77,7 +105,7 @@ def main(task='add', clean_garbage=False, normalize=True):
             journals_file='controller/toupdate.txt')
 
     elif task == 'add':
-        print "Loading keepinto.txt ISSN's file from FTP controller directory"
+        logger.debug("Loading keepinto.txt ISSN's file from FTP controller directory")
         tools.get_keep_into_file_from_ftp(ftp_host=config.FTP_HOST,
                                           user=config.FTP_USER,
                                           passwd=config.FTP_PASSWD)
@@ -85,14 +113,14 @@ def main(task='add', clean_garbage=False, normalize=True):
         issns = tools.load_journals_list(
             journals_file='controller/keepinto.txt')
 
-    print "Syncing XML's status according to WoS validated files"
+    logger.debug("Syncing XML's status according to WoS validated files")
     tools.get_sync_file_from_ftp(ftp_host=config.FTP_HOST,
                                  user=config.FTP_USER,
                                  passwd=config.FTP_PASSWD)
 
     tools.sync_validated_xml(coll_articles)
 
-    print "Creating file with a list of documents to be removed from WoS"
+    logger.debug("Creating file with a list of documents to be removed from WoS")
     tools.get_take_off_files_from_ftp(ftp_host=config.FTP_HOST,
                                       user=config.FTP_USER,
                                       passwd=config.FTP_PASSWD,
@@ -105,13 +133,13 @@ def main(task='add', clean_garbage=False, normalize=True):
                                      passwd=config.FTP_PASSWD,
                                      remove_origin=clean_garbage)
 
-    print "Update doi numbers according to field 237"
+    logger.debug("Update doi numbers according to field 237")
     tools.load_doi_from_237(coll_articles)
 
-    print "Update doi numbers according to text files"
+    logger.debug("Update doi numbers according to text files")
     tools.load_doi_from_file(coll_articles)
 
-    print "Defining document types elegible to send to SCI"
+    logger.debug("Defining document types elegible to send to SCI")
     tools.set_elegible_document_types(coll_articles)
 
     # Loading XML files
@@ -119,7 +147,7 @@ def main(task='add', clean_garbage=False, normalize=True):
         index_issn = index_issn + 1
 
         if issn in ids_to_remove:
-            print "Issn {0} is available in the takeoff and keepinto file. For now this ISSN was ignored, and will not be send to WoS until it is removed from the takeoff file.".format(issn)
+            logger.debug("Issn {0} is available in the takeoff and keepinto file. For now this ISSN was ignored, and will not be send to WoS until it is removed from the takeoff file.".format(issn))
             continue
 
         if task == 'update':
@@ -132,8 +160,8 @@ def main(task='add', clean_garbage=False, normalize=True):
         if documents.count() == 0:
             continue
 
-        print "validating {0} xml's for {1}".format(documents.count(), issn)
-        print "Loading documents to be validated"
+        logger.debug("validating {0} xml's for {1}".format(documents.count(), issn))
+        logger.debug("Loading documents to be validated")
 
         if not os.path.exists('tmp/xml'):
             os.makedirs('tmp/xml')
@@ -141,9 +169,12 @@ def main(task='add', clean_garbage=False, normalize=True):
         xml = ''
         xmlr = ''
         if not os.path.exists(xml_file_name):
-            index_document = 0
             for document in documents:
-                index_document = index_document + 1
+
+                #skip ahead documents
+                if 'v32' in document.data['article'] and 'ahead' in document.data['article']['v32'].lower():
+                    continue
+
                 xml = tools.validate_xml(coll_articles,
                                          document['code'],
                                          issn,
@@ -164,7 +195,7 @@ def main(task='add', clean_garbage=False, normalize=True):
                 xml_file.close()
 
         else:
-            print "File {0} already exists".format(xml_file_name)
+            logger.debug("File {0} already exists".format(xml_file_name))
 
     #zipping files
     files = os.listdir('tmp/xml')
@@ -180,23 +211,44 @@ def main(task='add', clean_garbage=False, normalize=True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Control the process of sending metadata to WoS")
-    parser.add_argument('-t',
-                        '--task',
-                        default='add',
-                        choices=['add', 'update'],
-                        help='Task that will be executed.')
-    parser.add_argument('-c',
-                        '--clean_garbage',
-                        action='store_true',
-                        default=False,
-                        help='Remove processed files from FTP.')
-    parser.add_argument('-n',
-                        '--normalize',
-                        action='store_true',
-                        default=False,
-                        help='Run normalization processing.')
+    parser.add_argument(
+        '-t',
+        '--task',
+        default='add',
+        choices=['add', 'update'],
+        help='Task that will be executed.'
+    )
+    parser.add_argument(
+        '-c',
+        '--clean_garbage',
+        action='store_true',
+        default=False,
+        help='Remove processed files from FTP.'
+    )
+    parser.add_argument(
+        '-n',
+        '--normalize',
+        action='store_true',
+        default=False,
+        help='Run normalization processing.'
+    )
+    parser.add_argument(
+        '--logging_file',
+        '-o',
+        default='/var/log/exportsci/export_sci.log',
+        help='Full path to the log file'
+    )
+    parser.add_argument(
+        '--logging_level',
+        '-l',
+        default='DEBUG',
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        help='Logggin level'
+    )
 
     args = parser.parse_args()
+
+    logger = _config_logging(args.logging_level, args.logging_file)
 
     main(task=str(args.task),
          clean_garbage=bool(args.clean_garbage),
