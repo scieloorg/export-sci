@@ -96,6 +96,8 @@ def main(task='add', clean_garbage=False, normalize=True):
     logger.debug("Defining document types elegible to send to SCI")
     dh.set_elegible_document_types()
 
+    xml_validator = tools.XMLValidator()
+
     # Loading XML files
     for issn in issns:
         index_issn = index_issn + 1
@@ -114,8 +116,14 @@ def main(task='add', clean_garbage=False, normalize=True):
         if not os.path.exists('tmp/xml'):
             os.makedirs('tmp/xml')
 
-        xml = ''
-        xmlr = ''
+        nsmap = {
+            'xml': 'http://www.w3.org/XML/1998/namespace',
+            'xlink': 'http://www.w3.org/1999/xlink'
+        }
+        global_xml = etree.Element('articles', nsmap=nsmap)
+        global_xml.set('dtd-version', '1.09')
+        global_xml.set('{http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation', 'ThomsonReuters_publishing_1.09.xsd')
+
         if not os.path.exists(xml_file_name):
             for total, current, document in documents:
                 if current == 1:
@@ -127,25 +135,22 @@ def main(task='add', clean_garbage=False, normalize=True):
                 if 'v32' in document['article'] and 'ahead' in document['article']['v32'][0]['_'].lower():
                     continue
 
-                xml = tools.validate_xml(document['collection'], document['code'])
+                xml = xml_validator.validate_xml(document['collection'], document['code'])
 
                 if xml:
-                    parser = etree.XMLParser(remove_blank_text=True)
-                    root = etree.fromstring(xml, parser)
-                    xmlr = xmlr + etree.tostring(root.getchildren()[0])
+                    global_xml.append(xml.find('article'))
 
-            if xml:
-                xml_file = open(xml_file_name, 'w')
-                xml_file.write('<articles xmlns:xlink="http://www.w3.org/1999/xlink" '\
-                               'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '\
-                               'xsi:noNamespaceSchemaLocation="ThomsonReuters_publishing_1.09.xsd" '\
-                               'dtd-version="1.09">')
-                xml_file.write(xmlr)
-                xml_file.write("</articles>")
-                xml_file.close()
+            # Convertendo XML para texto
+            try:
+                textxml = etree.tostring(global_xml, encoding='utf-8', method='xml')
+            except:
+                pass
 
+            xml_file = open(xml_file_name, 'w')
+            xml_file.write(textxml)
+            xml_file.close()
         else:
-            logger.debug("File {0} already exists".format(xml_file_name))
+            logger.warning("File {0} already exists".format(xml_file_name))
 
     #zipping files
     files = os.listdir('tmp/xml')

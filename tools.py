@@ -9,8 +9,9 @@ import logging
 import requests
 import pymongo
 from pymongo import Connection
-from packtools import Schema
 from lxml import etree
+from lxml.etree import DocumentInvalid
+from StringIO import StringIO
 
 # SciELO article types stored in field v71 that are allowed to be sent to WoS
 wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
@@ -20,11 +21,15 @@ wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
 wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 'sza', 'prt', 'cri', 'per', 'mex', 'ury']
 
 
-def write_log(article_id, issn, schema, xml, msg):
+def write_log(msg):
     now = datetime.now().isoformat()[0:10]
+    issn = msg.split(':')[1][1:10]
     error_report = open("reports/{0}_{1}_errors.txt".format(issn, now), "a")
-    error_msg = "{0}: {1}\r\n".format(article_id, str(schema.get_validation_errors(xml)))
-    error_report.write(error_msg)
+    msg = u'%s\r\n' % msg
+    try:
+        error_report.write(msg.encode('utf-8'))
+    except:
+        import pdb; pdb.set_trace()
     error_report.close()
 
 
@@ -205,42 +210,51 @@ def load_journals_list(journals_file='journals.txt'):
         return None
 
 
-def validate_xml(collection, code):
-    """
-    Validate article agains WOS Schema. Flaging his attribute validated_scielo
-    to True if the document is valid.
-    """
+class XMLValidator(object):
 
-    xsd = open('xsd/ThomsonReuters_publishing.xsd', 'r').read()
-    sch = Schema(xsd)
+    def __init__(self):
+        str_schema = open('xsd/ThomsonReuters_publishing.xsd', 'r')
+        schema_doc = etree.parse(str_schema)
+        self._schema = etree.XMLSchema(schema_doc)
 
-    articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
+    def validate_xml(self, collection, code):
+        articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
 
-    params = {'collection': collection, 'code': code, 'format': 'xmlwos'}
+        params = {'collection': collection, 'code': code, 'format': 'xmlwos'}
 
-    try:
-        xml = requests.get(articlemeta_url, params=params, timeout=30).text
-    except:
-        logging.error('error fetching url from articlemeta: %s' % articlemeta_url)
-        return None
+        try:
+            textxml = requests.get(articlemeta_url, params=params, timeout=30).text
+        except:
+            logging.error('error fetching url from articlemeta: %s' % articlemeta_url)
+            return None
 
-    try:
-        result = sch.validate(xml)
-    except etree.XMLSyntaxError as e:
-        msg = "{0}: Problems reading de XML, {1}".format(code, e.text)
-        write_log(code, code[1:10], sch, xml, msg)
-        return None
+        xml = StringIO(textxml)
 
-    if result:
-        return xml
-    else:
-        msg = ""
-        for error in sch.get_validation_errors(xml):
-            msg += "{0}: {1}\r\n".format(code, error[2])
-        write_log(code, code[1:10], sch, xml, msg)
+        ## Validating well formed
+        try:
+            parsedxml = etree.parse(xml)
+        except:
+            msg = u"%s:Not a well formed XML" % code
+            write_log(msg)
+            return None
 
-    return None
+        ## Validating agains schema
+        try:
+            result = self._schema.validate(parsedxml)
+        except etree.XMLSyntaxError as e:
+            msg = u"%s:XML Invalid" % code
+            write_log(msg)
+            return None
 
+        if result:
+            return parsedxml
+
+        # Capturing validation errors
+        try:
+            self._schema.assertValid(parsedxml)
+        except DocumentInvalid as e:
+            for msg in [u'%s:%s:%s' % (collection, code, unicode(i)) for i in e.error_log]:
+                write_log(msg)
 
 class DataHandler(object):
 
