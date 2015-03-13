@@ -29,7 +29,8 @@ def write_log(msg):
     try:
         error_report.write(msg.encode('utf-8'))
     except:
-        import pdb; pdb.set_trace()
+        logging.error('Error writing report line')
+
     error_report.close()
 
 
@@ -180,9 +181,13 @@ def packing_zip(files):
 
     target = 'tmp/scielo_{0}.zip'.format(now)
 
+    logging.info('zipping XML files to: %s' % target)
+
     with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zipf:
         for xml_file in files:
             zipf.write('tmp/xml/{0}'.format(xml_file), arcname=xml_file)
+
+    logging.debug('Files zipped into: %s' % target)
 
     return target
 
