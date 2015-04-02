@@ -1,0 +1,8 @@
+[main:exportsci]
+working_dir = ~/exportsci
+ftp_host = ftp.scielo.br
+ftp_user =
+ftp_passwd =
+mongodb_host = 127.0.0.1
+mongodb_port = 27017
+mongodb_slaveok = 0

@@ -176,16 +176,13 @@ def get_take_off_files_from_ftp(ftp_host='localhost',
 def packing_zip(files):
     now = datetime.now().isoformat()[0:10]
 
-    if not os.path.exists('tmp/'):
-        os.makedirs('tmp/', 0755)
-
-    target = 'tmp/scielo_{0}.zip'.format(now)
+    target = 'scielo_{0}.zip'.format(now)
 
     logging.info('zipping XML files to: %s' % target)
 
     with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zipf:
         for xml_file in files:
-            zipf.write('tmp/xml/{0}'.format(xml_file), arcname=xml_file)
+            zipf.write('xml/{0}'.format(xml_file), arcname=xml_file)
 
     logging.debug('Files zipped into: %s' % target)
 
@@ -218,7 +215,10 @@ def load_journals_list(journals_file='journals.txt'):
 class XMLValidator(object):
 
     def __init__(self):
-        str_schema = open('xsd/ThomsonReuters_publishing.xsd', 'r')
+        str_schema = open(
+            os.path.abspath(
+                os.path.join(
+                    os.path.dirname(__file__), 'xsd/ThomsonReuters_publishing.xsd')), 'r')
         schema_doc = etree.parse(str_schema)
         self._schema = etree.XMLSchema(schema_doc)
 

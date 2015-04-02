@@ -1,6 +1,0 @@
-#FTP credentials
-FTP_HOST = 'localhost'
-FTP_USER = 'anonymous'
-FTP_PASSWD = 'anonymous'
-MONGODB_HOST = 'localhost'
-MONGODB_PORT = 27017
