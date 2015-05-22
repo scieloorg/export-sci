@@ -99,8 +99,6 @@ def get_sync_file_from_ftp(ftp_host='localhost',
     ftp.quit()
     f.close()
 
-    logging.debug('Syncronization files copied from ftp reports/SCIELO_ProcessedRecordIds*')
-
     if remove_origin:
         for report_file in report_files:
             logging.debug('Syncronization files removed from ftp: %s' % report_file)
