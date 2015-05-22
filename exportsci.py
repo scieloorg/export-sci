@@ -147,33 +147,37 @@ def run(task='add', clean_garbage=False, normalize=True):
         global_xml.set('dtd-version', '1.09')
         global_xml.set('{http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation', 'ThomsonReuters_publishing_1.09.xsd')
 
-        if not os.path.exists(xml_file_name):
-            for total, current, document in documents:
-                if current == 1:
-                    logger.info("validating xml's {0} for {1}".format(total, issn))
-
-                logger.info("validating xml {0}/{1}".format(current, total))
-
-                #skip ahead documents
-                if 'v32' in document['article'] and 'ahead' in document['article']['v32'][0]['_'].lower():
-                    continue
-
-                xml = xml_validator.validate_xml(document['collection'], document['code'])
-
-                if xml:
-                    global_xml.append(xml.find('article'))
-
-            # Convertendo XML para texto
-            try:
-                textxml = etree.tostring(global_xml, encoding='utf-8', method='xml')
-            except:
-                pass
-
-            xml_file = open(xml_file_name, 'w')
-            xml_file.write(textxml)
-            xml_file.close()
-        else:
+        if os.path.exists(xml_file_name):
             logger.warning("File {0} already exists".format(xml_file_name))
+            continue
+
+        for total, current, document in documents:
+            if current == 1:
+                logger.info("validating xml's {0} for {1}".format(total, issn))
+
+            logger.info("validating xml {0}/{1}".format(current, total))
+
+            #skip ahead documents
+            if 'v32' in document['article'] and 'ahead' in document['article']['v32'][0]['_'].lower():
+                continue
+
+            xml = xml_validator.validate_xml(document['collection'], document['code'])
+
+            if xml:
+                global_xml.append(xml.find('article'))
+
+        # Convertendo XML para texto
+        try:
+            textxml = etree.tostring(global_xml, encoding='utf-8', method='xml')
+        except:
+            pass
+
+        if len(global_xml.findall('article')) == 0:
+            continue
+
+        xml_file = open(xml_file_name, 'w')
+        xml_file.write(textxml)
+        xml_file.close()
 
     #zipping files
     files = os.listdir('xml')
