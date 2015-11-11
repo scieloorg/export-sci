@@ -2973,6 +2973,7 @@
 					<xs:simpleType>
 						<xs:restriction base="xs:string">
 							<xs:enumeration value="SciELO Argentina"/>
+							<xs:enumeration value="SciELO Bolivia"/>
 							<xs:enumeration value="SciELO Brazil"/>
 							<xs:enumeration value="SciELO Chile"/>
 							<xs:enumeration value="SciELO Colombia"/>
@@ -2980,10 +2981,11 @@
 							<xs:enumeration value="SciELO Cuba"/>
 							<xs:enumeration value="SciELO Spain"/>
 							<xs:enumeration value="SciELO Mexico"/>
+							<xs:enumeration value="SciELO Peru"/>
 							<xs:enumeration value="SciELO Portugal"/>
 							<xs:enumeration value="SciELO South Africa"/>
-							<xs:enumeration value="SciELO Venezuela"/>
-							<xs:enumeration value="SciELO Peru"/>
+							<xs:enumeration value="SciELO Uruguay"/>
+							<xs:enumeration value="SciELO Venezuela"/>												
 						</xs:restriction>
 					</xs:simpleType>
 				</xs:element>

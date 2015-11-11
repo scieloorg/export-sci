@@ -144,8 +144,8 @@ def run(task='add', clean_garbage=False, normalize=True):
             'xlink': 'http://www.w3.org/1999/xlink'
         }
         global_xml = etree.Element('articles', nsmap=nsmap)
-        global_xml.set('dtd-version', '1.09')
-        global_xml.set('{http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation', 'ThomsonReuters_publishing_1.09.xsd')
+        global_xml.set('dtd-version', '1.10')
+        global_xml.set('{http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation', 'ThomsonReuters_publishing_1.10.xsd')
 
         if os.path.exists(xml_file_name):
             logger.warning("File {0} already exists".format(xml_file_name))
