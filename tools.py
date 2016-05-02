@@ -82,6 +82,20 @@ def send_take_off_files_to_ftp(ftp_host='localhost',
     ftp.quit()
 
 
+def remove_previous_unbound_files_from_ftp(ftp_host='localhost',
+                           user='anonymous',
+                           passwd='anonymous',
+                           remove_origin=False):
+
+    ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
+    ftp.cwd('inbound')
+    report_files = ftp.nlst('*')
+
+    for report_file in report_files:
+        logging.debug('Previous unbound files removed from ftp: %s' % report_file)
+        ftp.delete(report_file)
+
+
 def get_sync_file_from_ftp(ftp_host='localhost',
                            user='anonymous',
                            passwd='anonymous',

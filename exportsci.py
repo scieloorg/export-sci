@@ -96,6 +96,11 @@ def run(task='add', clean_garbage=False, normalize=True):
 
         issns = tools.load_journals_list(journals_file='controller/keepinto.txt')
 
+    logger.debug("Remove previous inbound files")
+    tools.remove_previous_unbound_files_from_ftp(ftp_host=FTP_HOST,
+                                 user=FTP_USER,
+                                 passwd=FTP_PASSWD)
+
     logger.debug("Syncing XML's status according to WoS validated files")
     tools.get_sync_file_from_ftp(ftp_host=FTP_HOST,
                                  user=FTP_USER,
