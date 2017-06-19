@@ -8,7 +8,7 @@ import logging
 
 import requests
 import pymongo
-from pymongo import Connection
+from pymongo import MongoClient
 from lxml import etree
 from lxml.etree import DocumentInvalid
 from StringIO import StringIO
@@ -273,37 +273,33 @@ class XMLValidator(object):
             for msg in [u'%s:%s:%s' % (collection, code, unicode(i)) for i in e.error_log]:
                 write_log(msg)
 
+
 class DataHandler(object):
 
     def __init__(
         self,
         mongodb_host='localhost',
         mongodb_port=27017,
-        mongodb_database='articlemeta', 
-        mongodb_collection='articles'):
+        mongodb_database='articlemeta',
+        mongodb_collection='articles'
+    ):
 
-        db = Connection(mongodb_host, mongodb_port)[mongodb_database]
+        db = MongoClient(mongodb_host, mongodb_port)[mongodb_database]
 
         self._articles_coll = self._set_articles_coll(db)
         self._collections_coll = self._set_collections_coll(db)
 
     def _set_articles_coll(self, db):
-        
+
         coll = db['articles']
-        # coll.ensure_index([('code_title', pymongo.ASCENDING), ('sent_wos', pymongo.ASCENDING), ('applicable', pymongo.ASCENDING), ('publication_year', pymongo.ASCENDING)])
-        # coll.ensure_index([('code_title', pymongo.ASCENDING), ('sent_wos', pymongo.ASCENDING), ('publication_year', pymongo.ASCENDING)])
         coll.ensure_index('publication_year')
         coll.ensure_index('sent_wos')
-        coll.ensure_index('code')
-        coll.ensure_index('code_title')
         coll.ensure_index('applicable')
-        coll.ensure_index('collection')
-        coll.ensure_index('doi')
 
         return coll
 
     def _set_collections_coll(self, db):
-        
+
         coll = db['collections']
         coll.ensure_index('code')
 

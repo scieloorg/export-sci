@@ -1,4 +1,4 @@
-requests==2.5.3
+requests==2.11.1
 pymongo==2.5.2
-lxml==3.4.2
--e git+https://github.com/scieloorg/export-sci@0.1.7#egg=exportsci
+lxml==3.8.0
+-e git+https://github.com/scieloorg/export-sci@0.2.7#egg=exportsci
