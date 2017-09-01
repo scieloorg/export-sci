@@ -333,7 +333,7 @@ class DataHandler(object):
         with open('controller/validated_ids.txt', 'r') as f:
             for pid in f:
                 self._articles_coll.update(
-                    {'code': pid.strip()}, {'$set': {'sent_wos': 'True'}}
+                    {'code': pid.strip()}, {'$set': {'sent_wos': 'True'}}, multi=True
                 )
 
         if remove_origin:
