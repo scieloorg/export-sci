@@ -284,7 +284,8 @@ class DataHandler(object):
         mongodb_collection='articles'
     ):
 
-        db = MongoClient(mongodb_host, mongodb_port)[mongodb_database]
+        import pdb; pdb.set_trace()
+        db = MongoClient(mongodb_host)[mongodb_database]
 
         self._articles_coll = self._set_articles_coll(db)
         self._collections_coll = self._set_collections_coll(db)

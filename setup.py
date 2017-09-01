@@ -17,7 +17,7 @@ requires = [
 
 setup(
     name="exportsci",
-    version='0.3.7',
+    version='0.4.0',
     description="Export metadata to SciELO CI",
     author="SciELO",
     author_email="scielo-dev@googlegroups.com",

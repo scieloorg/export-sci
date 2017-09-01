@@ -17,8 +17,8 @@ FTP_HOST = settings['ftp_host']
 FTP_USER = settings['ftp_user']
 FTP_PASSWD = settings['ftp_passwd']
 MONGODB_HOST = settings['mongodb_host']
-MONGODB_PORT = int(settings['mongodb_port'])
 MONGODB_SLAVEOK = bool(settings['mongodb_slaveok'])
+
 
 def _config_logging(logging_level='INFO', logging_file=None):
 
@@ -63,9 +63,9 @@ def run(task='add', clean_garbage=False, normalize=True):
         exit()
 
     # Setup a connection to SciELO Network Collection
-    logger.debug("Connecting to mongodb with DataHandler thru %s:%s" % (MONGODB_HOST, MONGODB_PORT))
+    logger.debug("Connecting to mongodb with DataHandler thru %s" % (MONGODB_HOST))
 
-    dh = tools.DataHandler(MONGODB_HOST, MONGODB_PORT)
+    dh = tools.DataHandler(MONGODB_HOST)
 
     now = datetime.now().isoformat()[0:10]
     index_issn = 0
@@ -96,10 +96,10 @@ def run(task='add', clean_garbage=False, normalize=True):
 
         issns = tools.load_journals_list(journals_file='controller/keepinto.txt')
 
-    # logger.debug("Remove previous inbound files")
-    # tools.remove_previous_unbound_files_from_ftp(ftp_host=FTP_HOST,
-    #                              user=FTP_USER,
-    #                              passwd=FTP_PASSWD)
+    logger.debug("Remove previous inbound files")
+    tools.remove_previous_unbound_files_from_ftp(ftp_host=FTP_HOST,
+                                 user=FTP_USER,
+                                 passwd=FTP_PASSWD)
 
     logger.debug("Syncing XML's status according to WoS validated files")
     tools.get_sync_file_from_ftp(ftp_host=FTP_HOST,
