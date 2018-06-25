@@ -7,11 +7,13 @@ from ftplib import FTP, error_perm
 import logging
 
 import requests
-import pymongo
 from pymongo import MongoClient
 from lxml import etree
-from lxml.etree import DocumentInvalid
-from StringIO import StringIO
+
+try:
+    from io import StringIO
+except:
+    from StringIO import StringIO
 
 # SciELO article types stored in field v71 that are allowed to be sent to WoS
 wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
@@ -21,15 +23,47 @@ wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
 wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 'sza', 'prt', 'cri', 'per', 'mex', 'ury', 'bol']
 
 
+def update_zipfile(target, files2append, src_path, mode='a'):
+    with zipfile.ZipFile(
+            target,
+            mode,
+            compression=zipfile.ZIP_DEFLATED,
+            allowZip64=True) as zipf:
+        for f in files2append:
+            src = os.path.join(src_path, f)
+            logging.info('zipping %s to: %s' % (src, target))
+            zipf.write(src, arcname=f)
+
+    logging.debug('Files zipped into: %s' % target)
+
+    return target
+
+
+def write_file(filename, content, new=True):
+    error_report = open(filename, 'w' if new else 'a')
+    content = content.encode('utf-8')
+    try:
+        error_report.write(content)
+    except:
+        logging.error('Error writing file: %s' % filename, exc_info=True)
+
+    error_report.close()
+
+
 def write_log(msg):
     now = datetime.now().isoformat()[0:10]
     issn = msg.split(':')[1][1:10]
+    if not os.path.isdir("reports"):
+        os.makedirs("reports")
     error_report = open("reports/{0}_{1}_errors.txt".format(issn, now), "a")
     msg = u'%s\r\n' % msg
     try:
+        error_report.write(msg)
+    except TypeError:
         error_report.write(msg.encode('utf-8'))
     except:
-        logging.error('Error writing report line')
+
+        logging.error('Error writing report line', exc_info=True)
 
     error_report.close()
 
@@ -42,6 +76,34 @@ def ftp_connect(ftp_host='localhost',
     ftp.login(user=user, passwd=passwd)
 
     return ftp
+
+
+def ftp_mkdirs(ftp_connection, dirs):
+    folder = os.path.dirname(target)
+    folders = folder.split('/')
+    pwd = ftp_connection.pwd()
+    for folder in folders:
+        try:
+            ftp_connection.mkd(folder)
+        except Exception as e:
+            print(e)
+            pass
+        ftp_connection.cwd(folder)
+    ftp_connection.cwd(pwd)
+
+
+def send_file_by_ftp(
+        src_filename, target,
+        ftp_host='localhost',
+        user='anonymous',
+        passwd='anonymous'):
+    ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
+    ftp_mkdirs(ftp, os.path.dirname(target))
+    f = open('{0}'.format(src_filename), 'rd')
+    ftp.storbinary('STOR {}'.format(target), f)
+    f.close()
+    ftp.quit()
+    logging.debug('Sent %s to %s by ftp' % (src_filename, target))
 
 
 def send_to_ftp(file_name,
@@ -224,54 +286,184 @@ def load_journals_list(journals_file='journals.txt'):
         return None
 
 
-class XMLValidator(object):
+class XML(object):
 
-    def __init__(self):
-        str_schema = open(
-            os.path.abspath(
-                os.path.join(
-                    os.path.dirname(__file__), 'xsd/ThomsonReuters_publishing.xsd')), 'r')
-        schema_doc = etree.parse(str_schema)
-        self._schema = etree.XMLSchema(schema_doc)
+    def __init__(self, textxml):
+        self.parse_errors = []
+        self.text = textxml
+        self._parse_xml()
 
-    def validate_xml(self, collection, code):
-        articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
-
-        params = {'collection': collection, 'code': code, 'format': 'xmlwos'}
-
+    def _parse_xml(self):
+        xml = StringIO(self.text)
+        self.parsed = None
         try:
-            textxml = requests.get(articlemeta_url, params=params, timeout=30).text
-        except:
-            logging.error('error fetching url from articlemeta: %s' % articlemeta_url)
-            return None
-
-        xml = StringIO(textxml)
-
-        ## Validating well formed
-        try:
-            parsedxml = etree.parse(xml)
-        except:
-            msg = u"%s:Not a well formed XML" % code
-            write_log(msg)
-            return None
-
-        ## Validating agains schema
-        try:
-            result = self._schema.validate(parsedxml)
+            self.parsed = etree.parse(xml)
         except etree.XMLSyntaxError as e:
-            msg = u"%s:XML Invalid" % code
-            write_log(msg)
-            return None
+            self.parse_errors.append(str(e))
+        except Exception as e:
+            self.parse_errors.append(e)
 
-        if result:
-            return parsedxml
+    @property
+    def display_format(self):
+        if self.parsed is None:
+            return self.text.replace('<', '\n<').replace('\n', '\n').strip()
+        return etree.tostring(
+                self.parsed,
+                encoding='utf-8',
+                pretty_print=True).decode('utf-8')
+
+
+class ValidatedXML(object):
+
+    def __init__(self, textxml, xsd_filename):
+        self.xml_schema = xsd_filename
+        self.errors = None
+        self._xml = None
+        self._xml_to_validate = None
+        if textxml is None:
+            self.errors = ['XML is not available']
+        else:
+            self._xml = XML(textxml)
+            self._xml_to_validate = XML(self._xml.display_format)
+            self.errors = self.validate()
+
+    @property
+    def parsed(self):
+        if self._xml is not None:
+            return self._xml.parsed
+
+    @property
+    def display_format(self):
+        if self._xml is not None:
+            return self._xml.display_format
+
+    @property
+    def numbered_lines(self):
+        if self._xml is not None:
+            lines = self.display_format.split('\n')
+            nlines = len(lines)
+            digits = len(str(nlines))
+            return '\n'.join(
+                [u'{}:{}'.format(str(n).zfill(digits), line)
+                 for n, line in zip(range(1,nlines), lines)])
+
+    @property
+    def xml_schema(self):
+        return self._xml_schema
+
+    @xml_schema.setter
+    def xml_schema(self, xsd_filename):
+        str_schema = open(xsd_filename, 'r')
+        schema_doc = etree.parse(str_schema)
+        self._xml_schema = etree.XMLSchema(schema_doc)
+
+    def validate(self):
+        # Validating well formed
+        if len(self._xml_to_validate.parse_errors) > 0:
+            return self._xml_to_validate.parse_errors
+
+        # Validating agains schema
+        try:
+            if self.xml_schema.validate(self._xml_to_validate.parsed):
+                return []
+        except etree.XMLSyntaxError as e:
+            return [str(e)]
+        except Exception as e:
+            return [e]
 
         # Capturing validation errors
         try:
-            self._schema.assertValid(parsedxml)
-        except DocumentInvalid as e:
-            for msg in [u'%s:%s:%s' % (collection, code, unicode(i)) for i in e.error_log]:
-                write_log(msg)
+            self.xml_schema.assertValid(self._xml_to_validate.parsed)
+        except etree.DocumentInvalid as e:
+            return [str(item) for item in e.error_log]
+        except Exception as e:
+            return [e]
+
+
+class Reports(object):
+
+    def __init__(self, collection, code):
+        self.collection = collection
+        self.code = code
+        self.XML_ERRORS_PATH = 'xml_errors'
+        self.valid_items_report = os.path.join(self.issn_path, 'valid.log')
+        self.collection_zip = 'collections/{}.zip'.format(self.collection)
+
+    @property
+    def issn_path(self):
+        issn = self.code[1:10]
+        path = '{}/{}/{}'.format(self.XML_ERRORS_PATH, self.collection, issn)
+        if not os.path.isdir(path):
+            os.makedirs(path)
+        return path
+
+    def register_valid_item(self):
+        now = datetime.now().isoformat()
+        write_file(self.valid_items_report, now+' '+self.code, new=False)
+        self.update_collection_zipfile(self.valid_items_report)
+
+    def register_errors(self, validated, info_at_top=False):
+        errors = '\n'.join(validated.errors)
+        report_filename = '{}/{}.err'.format(self.issn_path, self.code)
+        url = 'http://articlemeta.scielo.org/api/v1/article/' \
+              '?collection={}&code={}&format=xmlwos\n'.format(
+                    self.collection, self.code)
+        sep = '\n'*2+'='*10+'\n'
+        content = ''
+        if info_at_top:
+            content = sep.join(
+                [url, errors, validated.numbered_lines]
+            )
+        else:
+            content = sep.join(
+                [validated.display_format, url, errors]
+            )
+
+        write_file(
+            report_filename,
+            content
+        )
+        self.update_collection_zipfile(report_filename)
+
+    def update_collection_zipfile(self, report_filename):
+        path = os.path.dirname(self.collection_zip)
+        if not os.path.isdir(path):
+            os.makedirs(path)
+        p = report_filename.find(self.XML_ERRORS_PATH)
+        f = report_filename[p+len(self.XML_ERRORS_PATH)+1:]
+        update_zipfile(self.collection_zip, [f], self.XML_ERRORS_PATH)
+
+
+class XMLValidator(object):
+
+    def __init__(self):
+        self.xsd_filename = os.path.abspath(
+                            os.path.join(
+                                os.path.dirname(__file__),
+                                'xsd/ThomsonReuters_publishing.xsd'))
+        self.XML_ERRORS_PATH = 'xml_errors'
+
+    def validate_xml(self, collection, code):
+        textxml = self.get_xml(collection, code)
+        validated = ValidatedXML(textxml, self.xsd_filename)
+        collection_reports = Reports(collection, code)
+        if validated.errors is None or len(validated.errors) == 0:
+            collection_reports.register_valid_item()
+            return validated.parsed
+        else:
+            collection_reports.register_errors(validated)
+
+    def get_xml(self, collection, code):
+        articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
+        params = {'collection': collection,
+                  'code': code,
+                  'format': 'xmlwos'}
+        try:
+            return requests.get(
+                articlemeta_url, params=params, timeout=30).text
+        except:
+            logging.error(
+                'error fetching url from articlemeta: %s' % articlemeta_url)
 
 
 class DataHandler(object):
