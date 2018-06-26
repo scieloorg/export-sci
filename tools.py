@@ -2,6 +2,7 @@
 import re
 from datetime import datetime
 import os
+import shutil
 import zipfile
 from ftplib import FTP, error_perm
 import logging
@@ -10,10 +11,8 @@ import requests
 from pymongo import MongoClient
 from lxml import etree
 
-try:
-    from io import StringIO
-except:
-    from StringIO import StringIO
+from StringIO import StringIO
+
 
 # SciELO article types stored in field v71 that are allowed to be sent to WoS
 wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
@@ -22,21 +21,134 @@ wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
 
 wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 'sza', 'prt', 'cri', 'per', 'mex', 'ury', 'bol']
 
+XML_ERRORS_ROOT_PATH = 'xml_errors'
 
-def update_zipfile(target, files2append, src_path, mode='a'):
+
+class FTPService(object):
+
+    def __init__(
+            self,
+            ftp_host='localhost',
+            user='anonymous',
+            passwd='anonymous'):
+        self.ftp = FTP(ftp_host)
+        self.ftp.login(user=user, passwd=passwd)
+
+    def close(self):
+        self.ftp.quit()
+
+    def mkdirs(self, dirs):
+        folders = dirs.split('/')
+        pwd = self.ftp.pwd()
+        for folder in folders:
+            try:
+                self.ftp.mkd(folder)
+            except:
+                logging.info('FTP: MKD (%s)' % (dirs, ), exc_info=True)
+            self.ftp.cwd(folder)
+        self.ftp.cwd(pwd)
+
+    def send_file(self, local_filename, remote_filename):
+        pwd = self.ftp.pwd()
+        self.mkdirs(os.path.dirname(remote_filename))
+
+        f = open(local_filename, 'rd')
+        try:
+            self.ftp.storbinary('STOR {}'.format(remote_filename), f)
+        except:
+            logging.info(
+                'FTP: Unable to send %s to %s' %
+                (local_filename, remote_filename), exc_info=True)
+        f.close()
+        self.ftp.cwd(pwd)
+
+    def remove_files(self, dirs):
+        pwd = self.ftp.pwd()
+        try:
+            self.ftp.cwd(dirs)
+            files = self.ftp.nlst('*')
+            for file in files:
+                try:
+                    self.ftp.delete(file)
+                except:
+                    logging.info('FTP: Unable to remove file: %s' % file)
+        except:
+            logging.info('FTP: Unable to remove: %s' % dirs)
+
+        self.ftp.cwd(pwd)
+
+
+def delete_file_or_folder(path):
+    if os.path.isdir(path):
+        for item in os.listdir(path):
+            delete_file_or_folder(path + '/' + item)
+        try:
+            shutil.rmtree(path)
+        except:
+            logging.info('Unable to delete: %s' % path)
+
+    elif os.path.isfile(path):
+        try:
+            os.unlink(path)
+        except:
+            logging.info('Unable to delete: %s' % path)
+
+
+def zip_collections_reports(zip_path):
+    if not os.path.isdir(zip_path):
+        os.makedirs(zip_path)
+
+    for collection in os.listdir(XML_ERRORS_ROOT_PATH):
+        src_path = os.path.join(XML_ERRORS_ROOT_PATH, collection)
+        zipname = '{}/{}.zip'.format(zip_path, collection)
+        error_files = []
+        if os.path.isdir(src_path):
+            for issn in os.listdir(src_path):
+                d = os.path.join(src_path, issn)
+                if os.path.isdir(d):
+                    for f in os.listdir(d):
+                        filename = os.path.join(d, f)
+                        if os.path.isfile(filename):
+                            error_files.append('{}/{}/{}'.format(
+                                    collection,
+                                    issn,
+                                    f))
+        update_zipfile(zipname, error_files, XML_ERRORS_ROOT_PATH, delete=True)
+        delete_file_or_folder(os.path.join(XML_ERRORS_ROOT_PATH, collection))
+
+
+def ftp_collections_reports(ftp_host, user, passwd, local_path, remote_path):
+    ftp_service = FTPService(ftp_host, user, passwd)
+    ftp_service.remove_files(remote_path)
+    for file in os.listdir(local_path):
+        local = os.path.join(local_path, file)
+        if os.path.isfile(local) and file.endswith('.zip'):
+            remote = os.path.join(remote_path, file)
+            ftp_service.send_file(local, remote)
+            delete_file_or_folder(local)
+    ftp_service.close()
+
+
+def send_collections_reports(ftp_host, user, passwd,
+                             local_path='collections_reports',
+                             remote_path='collections_reports'):
+    zip_collections_reports(local_path)
+    ftp_collections_reports(ftp_host, user, passwd, local_path, remote_path)
+
+
+def update_zipfile(zip_filename, files, src_path, mode='a', delete=False):
     with zipfile.ZipFile(
-            target,
+            zip_filename,
             mode,
             compression=zipfile.ZIP_DEFLATED,
             allowZip64=True) as zipf:
-        for f in files2append:
+        for f in files:
             src = os.path.join(src_path, f)
-            logging.info('zipping %s to: %s' % (src, target))
+            logging.info('zipping %s to: %s' % (src, zip_filename))
             zipf.write(src, arcname=f)
-
-    logging.debug('Files zipped into: %s' % target)
-
-    return target
+            if delete is True:
+                delete_file_or_folder(src)
+    logging.debug('Files zipped into: %s' % zip_filename)
 
 
 def write_file(filename, content, new=True):
@@ -46,7 +158,6 @@ def write_file(filename, content, new=True):
         error_report.write(content)
     except:
         logging.error('Error writing file: %s' % filename, exc_info=True)
-
     error_report.close()
 
 
@@ -78,34 +189,6 @@ def ftp_connect(ftp_host='localhost',
     return ftp
 
 
-def ftp_mkdirs(ftp_connection, dirs):
-    folder = os.path.dirname(target)
-    folders = folder.split('/')
-    pwd = ftp_connection.pwd()
-    for folder in folders:
-        try:
-            ftp_connection.mkd(folder)
-        except Exception as e:
-            print(e)
-            pass
-        ftp_connection.cwd(folder)
-    ftp_connection.cwd(pwd)
-
-
-def send_file_by_ftp(
-        src_filename, target,
-        ftp_host='localhost',
-        user='anonymous',
-        passwd='anonymous'):
-    ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    ftp_mkdirs(ftp, os.path.dirname(target))
-    f = open('{0}'.format(src_filename), 'rd')
-    ftp.storbinary('STOR {}'.format(target), f)
-    f.close()
-    ftp.quit()
-    logging.debug('Sent %s to %s by ftp' % (src_filename, target))
-
-
 def send_to_ftp(file_name,
                 ftp_host='localhost',
                 user='anonymous',
@@ -121,6 +204,8 @@ def send_to_ftp(file_name,
     f.close()
     ftp.quit()
     logging.debug('file sent to ftp: %s' % target)
+
+    send_collections_reports(ftp_host, user, passwd)
 
 
 def send_take_off_files_to_ftp(ftp_host='localhost',
@@ -385,22 +470,21 @@ class Reports(object):
     def __init__(self, collection, code):
         self.collection = collection
         self.code = code
-        self.XML_ERRORS_PATH = 'xml_errors'
+        self.XML_ERRORS_ROOT_PATH = XML_ERRORS_ROOT_PATH
         self.valid_items_report = os.path.join(self.issn_path, 'valid.log')
-        self.collection_zip = 'collections/{}.zip'.format(self.collection)
 
     @property
     def issn_path(self):
         issn = self.code[1:10]
-        path = '{}/{}/{}'.format(self.XML_ERRORS_PATH, self.collection, issn)
+        path = '{}/{}/{}'.format(
+            self.XML_ERRORS_ROOT_PATH, self.collection, issn)
         if not os.path.isdir(path):
             os.makedirs(path)
         return path
 
     def register_valid_item(self):
         now = datetime.now().isoformat()
-        write_file(self.valid_items_report, now+' '+self.code, new=False)
-        self.update_collection_zipfile(self.valid_items_report)
+        write_file(self.valid_items_report, now+' '+self.code+'\n', new=False)
 
     def register_errors(self, validated, info_at_top=False):
         errors = '\n'.join(validated.errors)
@@ -408,7 +492,7 @@ class Reports(object):
         url = 'http://articlemeta.scielo.org/api/v1/article/' \
               '?collection={}&code={}&format=xmlwos\n'.format(
                     self.collection, self.code)
-        sep = '\n'*2+'='*10+'\n'
+        sep = '\n'+'='*10+'\n'
         content = ''
         if info_at_top:
             content = sep.join(
@@ -423,15 +507,6 @@ class Reports(object):
             report_filename,
             content
         )
-        self.update_collection_zipfile(report_filename)
-
-    def update_collection_zipfile(self, report_filename):
-        path = os.path.dirname(self.collection_zip)
-        if not os.path.isdir(path):
-            os.makedirs(path)
-        p = report_filename.find(self.XML_ERRORS_PATH)
-        f = report_filename[p+len(self.XML_ERRORS_PATH)+1:]
-        update_zipfile(self.collection_zip, [f], self.XML_ERRORS_PATH)
 
 
 class XMLValidator(object):
@@ -441,7 +516,6 @@ class XMLValidator(object):
                             os.path.join(
                                 os.path.dirname(__file__),
                                 'xsd/ThomsonReuters_publishing.xsd'))
-        self.XML_ERRORS_PATH = 'xml_errors'
 
     def validate_xml(self, collection, code):
         textxml = self.get_xml(collection, code)
