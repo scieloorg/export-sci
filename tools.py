@@ -10,7 +10,6 @@ import logging
 import requests
 from pymongo import MongoClient
 from lxml import etree
-
 from StringIO import StringIO
 
 
@@ -417,24 +416,24 @@ class XMLValidator(object):
                             os.path.join(
                                 os.path.dirname(__file__),
                                 'xsd/ThomsonReuters_publishing.xsd'))
+        self.articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
 
     def _get_xml(self, collection, code):
-        articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
         params = {'collection': collection,
                   'code': code,
                   'format': 'xmlwos'}
         try:
             return requests.get(
-                articlemeta_url, params=params, timeout=30).text
+                self.articlemeta_url, params=params, timeout=30).text
         except:
             logging.error(
-                'error fetching url from articlemeta: %s' % articlemeta_url)
+                'error fetching url: %s' % self.articlemeta_url)
 
     def validate_xml(self, collection, code):
         textxml = self._get_xml(collection, code)
         validated = ValidatedXML(textxml, self.xsd_filename)
-        article_report = ArticleReport(collection, code)
-        article_report.register_result(validated)
+        article_report = ArticleReport(self.articlemeta_url, collection, code)
+        article_report.save(validated)
         if validated.errors is None or len(validated.errors) == 0:
             return validated.parsed
 
@@ -457,7 +456,7 @@ class XML(object):
             self.parse_errors.append(e)
 
     @property
-    def display_format(self):
+    def pretty_text(self):
         if self.parsed is None:
             return self.text.replace('<', '\n<').replace('\n', '\n').strip()
         return etree.tostring(
@@ -471,13 +470,13 @@ class ValidatedXML(object):
     def __init__(self, textxml, xsd_filename):
         self.xml_schema = xsd_filename
         self.errors = None
-        self._xml = None
-        self._xml_to_validate = None
+        self._original_xml = None
+        self._pretty_xml = None
         if textxml is None:
             self.errors = ['XML is not available']
         else:
-            self._xml = XML(textxml)
-            self._xml_to_validate = XML(self._xml.display_format)
+            self._original_xml = XML(textxml)
+            self._pretty_xml = XML(self._original_xml.pretty_text)
             self.errors = self.validate()
 
     @property
@@ -492,17 +491,17 @@ class ValidatedXML(object):
 
     @property
     def parsed(self):
-        if self._xml is not None:
-            return self._xml.parsed
+        if self._original_xml is not None:
+            return self._original_xml.parsed
 
     def validate(self):
         # Validating well formed
-        if len(self._xml_to_validate.parse_errors) > 0:
-            return self._xml_to_validate.parse_errors
+        if len(self._pretty_xml.parse_errors) > 0:
+            return self._pretty_xml.parse_errors
 
         # Validating agains schema
         try:
-            if self.xml_schema.validate(self._xml_to_validate.parsed):
+            if self.xml_schema.validate(self._pretty_xml.parsed):
                 return []
         except etree.XMLSyntaxError as e:
             return [str(e)]
@@ -511,31 +510,34 @@ class ValidatedXML(object):
 
         # Capturing validation errors
         try:
-            self.xml_schema.assertValid(self._xml_to_validate.parsed)
+            self.xml_schema.assertValid(self._pretty_xml.parsed)
         except etree.DocumentInvalid as e:
             return [str(item) for item in e.error_log]
         except Exception as e:
             return [e]
 
     def display(self, numbered_lines=False):
-        if self._xml is not None:
+        if self._original_xml is not None:
             if numbered_lines:
-                lines = self._xml.display_format.split('\n')
+                lines = self._original_xml.pretty_text.split('\n')
                 nlines = len(lines)
                 digits = len(str(nlines))
                 return '\n'.join(
                     [u'{}:{}'.format(str(n).zfill(digits), line)
                      for n, line in zip(range(1, nlines), lines)])
-            return self._xml.display_format
+            return self._original_xml.pretty_text
 
 
 class ArticleReport(object):
 
-    def __init__(self, collection, code):
+    def __init__(self, article_uri, collection, code):
         self.collection = collection
         self.code = code
         self.XML_ERRORS_ROOT_PATH = XML_ERRORS_ROOT_PATH
-        self.valid_items_report = os.path.join(self.issn_path, 'valid.log')
+        self.report_filename = '{}/{}.err.txt'.format(
+            self.issn_path, self.code)
+        self.url = '{}/?collection={}&code={}&format=xmlwos\n'.format(
+                    article_uri, self.collection, self.code)
 
     @property
     def issn_path(self):
@@ -546,30 +548,20 @@ class ArticleReport(object):
             os.makedirs(path)
         return path
 
-    def register_valid_item(self):
+    def save(self, validated, numbered=False):
         now = datetime.now().isoformat()
-        write_file(self.valid_items_report, now+' '+self.code+'\n', new=False)
-
-    def register_result(self, validated, numbered=False):
-        now = datetime.now().isoformat()
-        report_filename = '{}/{}.err'.format(self.issn_path, self.code)
-
         if validated.errors is None or len(validated.errors) == 0:
-            return delete_file_or_folder(report_filename)
-
+            return delete_file_or_folder(self.report_filename)
         errors = '\n'.join(validated.errors)
-        url = 'http://articlemeta.scielo.org/api/v1/article/' \
-              '?collection={}&code={}&format=xmlwos\n'.format(
-                    self.collection, self.code)
         sep = '\n'*2
         content = []
         xml = validated.display(numbered)
         if numbered:
-            content = [now, url, 'ERRORS\n'+'='*6, errors, '-'*30, xml]
+            content = [now, self.url, 'ERRORS\n'+'='*6, errors, '-'*30, xml]
         else:
-            content = [xml, '-'*30, now, url, 'ERRORS\n'+'='*6, errors]
+            content = [xml, '-'*30, now, self.url, 'ERRORS\n'+'='*6, errors]
 
-        write_file(report_filename, sep.join(content))
+        write_file(self.report_filename, sep.join(content))
 
 
 class DataHandler(object):
