@@ -561,13 +561,13 @@ class ArticleReport(object):
         url = 'http://articlemeta.scielo.org/api/v1/article/' \
               '?collection={}&code={}&format=xmlwos\n'.format(
                     self.collection, self.code)
-        sep = '\n'+'='*10+'\n'
+        sep = '\n'*2
         content = []
         xml = validated.display(numbered)
         if numbered:
-            content = [now, url, errors, xml]
+            content = [now, url, 'ERRORS\n'+'='*6, errors, '-'*30, xml]
         else:
-            content = [xml, now, url, errors]
+            content = [xml, '-'*30, now, url, 'ERRORS\n'+'='*6, errors]
 
         write_file(report_filename, sep.join(content))
 
