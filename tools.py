@@ -2,16 +2,16 @@
 import re
 from datetime import datetime
 import os
+import shutil
 import zipfile
 from ftplib import FTP, error_perm
 import logging
 
 import requests
-import pymongo
 from pymongo import MongoClient
 from lxml import etree
-from lxml.etree import DocumentInvalid
 from StringIO import StringIO
+
 
 # SciELO article types stored in field v71 that are allowed to be sent to WoS
 wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
@@ -20,10 +20,193 @@ wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
 
 wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 'sza', 'prt', 'cri', 'per', 'mex', 'ury', 'bol']
 
+XML_ERRORS_ROOT_PATH = 'xml_errors'
+
+
+def delete_file_or_folder(path):
+    if os.path.isdir(path):
+        for item in os.listdir(path):
+            delete_file_or_folder(path + '/' + item)
+        try:
+            shutil.rmtree(path)
+        except:
+            logging.info('Unable to delete: %s' % path)
+
+    elif os.path.isfile(path):
+        try:
+            os.unlink(path)
+        except:
+            logging.info('Unable to delete: %s' % path)
+
+
+class FTPService(object):
+
+    def __init__(
+            self,
+            ftp_host='localhost',
+            user='anonymous',
+            passwd='anonymous'):
+        self.ftp_host = ftp_host
+        self.user = user
+        self.passwd = passwd
+        self.ftp = FTP()
+
+    def connect(self, timeout=60):
+        if self.ftp is None:
+            self.ftp = FTP()
+        self.ftp.connect(self.ftp_host, timeout=timeout)
+        self.ftp.login(user=self.user, passwd=self.passwd)
+
+    def close(self):
+        try:
+            self.ftp.quit()
+        except:
+            self.ftp.close()
+
+    def mkdirs(self, dirs):
+        self.connect()
+        folders = dirs.split('/')
+        pwd = self.ftp.pwd()
+        for folder in folders:
+            try:
+                self.ftp.mkd(folder)
+            except:
+                logging.info('FTP: MKD (%s)' % (dirs, ), exc_info=True)
+            self.ftp.cwd(folder)
+        self.ftp.cwd(pwd)
+        self.close()
+
+    def send_file(self, local_filename, remote_filename):
+        self.connect(600)
+
+        f = open(local_filename, 'rd')
+        try:
+            self.ftp.storbinary('STOR {}'.format(remote_filename), f)
+        except:
+            logging.info(
+                'FTP: Unable to send %s to %s' %
+                (local_filename, remote_filename), exc_info=True)
+        f.close()
+        self.close()
+
+    def remove_files(self, dirs):
+        self.connect()
+        pwd = self.ftp.pwd()
+        try:
+            self.ftp.cwd(dirs)
+            files = self.ftp.nlst('*')
+            for file in files:
+                try:
+                    self.ftp.delete(file)
+                except:
+                    logging.info('FTP: Unable to remove file: %s' % file)
+        except:
+            logging.info('FTP: Unable to remove: %s' % dirs)
+        self.ftp.cwd(pwd)
+        self.close()
+
+
+class CollectionReports(object):
+
+    def __init__(self, collection_name, reports_root_path, zips_root_path):
+        _date = datetime.now().isoformat()[:16]
+        _date = _date[:10]
+        _date = _date.replace(':', '').replace('-', '').replace('T', '_')
+        self.collection_name = collection_name
+        self.collection_reports_path = os.path.join(
+            reports_root_path, collection_name)
+        self.zipname_local = collection_name+'.zip'
+        self.zipname_remote = collection_name+'_'+_date+'.zip'
+        self.zip_filename = os.path.join(
+            zips_root_path, self.zipname_local)
+
+    def zip(self, delete=False):
+        rep_files = []
+        root_path = os.path.dirname(self.collection_reports_path)
+        if os.path.isdir(self.collection_reports_path):
+            for issn in os.listdir(self.collection_reports_path):
+                d = os.path.join(self.collection_reports_path, issn)
+                if os.path.isdir(d):
+                    for f in os.listdir(d):
+                        filename = os.path.join(d, f)
+                        if os.path.isfile(filename):
+                            rep_files.append('{}/{}/{}'.format(
+                                    self.collection_name,
+                                    issn,
+                                    f))
+        delete_file_or_folder(self.zip_filename)
+        update_zipfile(self.zip_filename, rep_files, root_path, delete=delete)
+        if delete:
+            delete_file_or_folder(self.collection_reports_path)
+
+    def ftp(self, ftp_service, remote_root_path, delete=False):
+        logging.info('ftp.send %s' % self.zip_filename)
+        if os.path.isfile(self.zip_filename):
+
+            logging.info('ftp.mkdirs %s' % remote_root_path)
+            ftp_service.mkdirs(remote_root_path)
+
+            remote = os.path.join(remote_root_path, self.zipname_remote)
+            logging.info(
+                'ftp.send_file %s to %s' % (self.zip_filename, remote))
+            sent = ftp_service.send_file(self.zip_filename, remote)
+            if sent is not False and delete:
+                delete_file_or_folder(self.zip_filename)
+
+
+def send_collections_reports(ftp_host, user, passwd,
+                             local_path='collections_reports',
+                             remote_path='collections_reports'):
+    ftp_service = FTPService(ftp_host, user, passwd)
+    reports_root_path = XML_ERRORS_ROOT_PATH
+
+    zips_root_path = local_path
+    if not os.path.isdir(zips_root_path):
+        os.makedirs(zips_root_path)
+
+    for collection_name in os.listdir(reports_root_path):
+        print(collection_name)
+        path = os.path.join(reports_root_path, collection_name)
+        if os.path.isdir(path):
+            reports = CollectionReports(
+                        collection_name, reports_root_path, zips_root_path)
+            reports.zip(delete=False)
+            reports.ftp(ftp_service, remote_path, delete=True)
+
+
+def update_zipfile(zip_filename, files, src_path, mode='a', delete=False):
+    with zipfile.ZipFile(
+            zip_filename,
+            mode,
+            compression=zipfile.ZIP_DEFLATED,
+            allowZip64=True) as zipf:
+        for f in files:
+            src = os.path.join(src_path, f)
+            logging.info('zipping %s to: %s' % (src, zip_filename))
+            try:
+                zipf.write(src, arcname=f)
+            except:
+                pass
+            if delete is True:
+                delete_file_or_folder(src)
+    logging.debug('Files zipped into: %s' % zip_filename)
+
+
+def write_file(filename, content, new=True):
+    error_report = open(filename, 'w' if new else 'a')
+    content = content.encode('utf-8')
+    try:
+        error_report.write(content)
+    except:
+        logging.error('Error writing file: %s' % filename, exc_info=True)
+    error_report.close()
+
 
 def write_log(msg):
     now = datetime.now().isoformat()[0:10]
     issn = msg.split(':')[1][1:10]
+    if not os.path.isdir("reports"):
+        os.makedirs("reports")
     error_report = open("reports/{0}_{1}_errors.txt".format(issn, now), "a")
     msg = u'%s\r\n' % msg
     try:
@@ -59,6 +242,8 @@ def send_to_ftp(file_name,
     f.close()
     ftp.quit()
     logging.debug('file sent to ftp: %s' % target)
+
+    send_collections_reports(ftp_host, user, passwd)
 
 
 def send_take_off_files_to_ftp(ftp_host='localhost',
@@ -227,51 +412,156 @@ def load_journals_list(journals_file='journals.txt'):
 class XMLValidator(object):
 
     def __init__(self):
-        str_schema = open(
-            os.path.abspath(
-                os.path.join(
-                    os.path.dirname(__file__), 'xsd/ThomsonReuters_publishing.xsd')), 'r')
-        schema_doc = etree.parse(str_schema)
-        self._schema = etree.XMLSchema(schema_doc)
+        self.xsd_filename = os.path.abspath(
+                            os.path.join(
+                                os.path.dirname(__file__),
+                                'xsd/ThomsonReuters_publishing.xsd'))
+        self.articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
+
+    def _get_xml(self, collection, code):
+        params = {'collection': collection,
+                  'code': code,
+                  'format': 'xmlwos'}
+        try:
+            return requests.get(
+                self.articlemeta_url, params=params, timeout=30).text
+        except:
+            logging.error(
+                'error fetching url: %s' % self.articlemeta_url)
 
     def validate_xml(self, collection, code):
-        articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
+        textxml = self._get_xml(collection, code)
+        validated = ValidatedXML(textxml, self.xsd_filename)
+        article_report = ArticleReport(self.articlemeta_url, collection, code)
+        article_report.save(validated)
+        if validated.errors is None or len(validated.errors) == 0:
+            return validated.parsed
 
-        params = {'collection': collection, 'code': code, 'format': 'xmlwos'}
 
+class XML(object):
+
+    def __init__(self, textxml):
+        self.parse_errors = []
+        self.text = textxml
+        self._parse_xml()
+
+    def _parse_xml(self):
+        xml = StringIO(self.text)
+        self.parsed = None
         try:
-            textxml = requests.get(articlemeta_url, params=params, timeout=30).text
-        except:
-            logging.error('error fetching url from articlemeta: %s' % articlemeta_url)
-            return None
-
-        xml = StringIO(textxml)
-
-        ## Validating well formed
-        try:
-            parsedxml = etree.parse(xml)
-        except:
-            msg = u"%s:Not a well formed XML" % code
-            write_log(msg)
-            return None
-
-        ## Validating agains schema
-        try:
-            result = self._schema.validate(parsedxml)
+            self.parsed = etree.parse(xml)
         except etree.XMLSyntaxError as e:
-            msg = u"%s:XML Invalid" % code
-            write_log(msg)
-            return None
+            self.parse_errors.append(str(e))
+        except Exception as e:
+            self.parse_errors.append(e)
 
-        if result:
-            return parsedxml
+    @property
+    def pretty_text(self):
+        if self.parsed is None:
+            return self.text.replace('<', '\n<').replace('\n', '\n').strip()
+        return etree.tostring(
+                self.parsed,
+                encoding='utf-8',
+                pretty_print=True).decode('utf-8')
+
+
+class ValidatedXML(object):
+
+    def __init__(self, textxml, xsd_filename):
+        self.xml_schema = xsd_filename
+        self.errors = None
+        self._original_xml = None
+        self._pretty_xml = None
+        if textxml is None:
+            self.errors = ['XML is not available']
+        else:
+            self._original_xml = XML(textxml)
+            self._pretty_xml = XML(self._original_xml.pretty_text)
+            self.errors = self._validate()
+
+    @property
+    def xml_schema(self):
+        return self._xml_schema
+
+    @xml_schema.setter
+    def xml_schema(self, xsd_filename):
+        str_schema = open(xsd_filename, 'r')
+        schema_doc = etree.parse(str_schema)
+        self._xml_schema = etree.XMLSchema(schema_doc)
+
+    @property
+    def parsed(self):
+        if self._original_xml is not None:
+            return self._original_xml.parsed
+
+    def _validate(self):
+        # Validating well formed
+        if len(self._pretty_xml.parse_errors) > 0:
+            return self._pretty_xml.parse_errors
+
+        # Validating against schema
+        try:
+            if self.xml_schema.validate(self._pretty_xml.parsed):
+                return []
+        except etree.XMLSyntaxError as e:
+            return [str(e)]
+        except Exception as e:
+            return [e]
 
         # Capturing validation errors
         try:
-            self._schema.assertValid(parsedxml)
-        except DocumentInvalid as e:
-            for msg in [u'%s:%s:%s' % (collection, code, unicode(i)) for i in e.error_log]:
-                write_log(msg)
+            self.xml_schema.assertValid(self._pretty_xml.parsed)
+        except etree.DocumentInvalid as e:
+            return [str(item) for item in e.error_log]
+        except Exception as e:
+            return [e]
+
+    def display(self, numbered_lines=False):
+        if self._original_xml is not None:
+            if numbered_lines:
+                lines = self._original_xml.pretty_text.split('\n')
+                nlines = len(lines)
+                digits = len(str(nlines))
+                return '\n'.join(
+                    [u'{}:{}'.format(str(n).zfill(digits), line)
+                     for n, line in zip(range(1, nlines), lines)])
+            return self._original_xml.pretty_text
+
+
+class ArticleReport(object):
+
+    def __init__(self, article_uri, collection, code):
+        self.collection = collection
+        self.code = code
+        self.XML_ERRORS_ROOT_PATH = XML_ERRORS_ROOT_PATH
+        self.report_filename = '{}/{}.err.txt'.format(
+            self.issn_path, self.code)
+        self.url = '{}/?collection={}&code={}&format=xmlwos\n'.format(
+                    article_uri, self.collection, self.code)
+
+    @property
+    def issn_path(self):
+        issn = self.code[1:10]
+        path = '{}/{}/{}'.format(
+            self.XML_ERRORS_ROOT_PATH, self.collection, issn)
+        if not os.path.isdir(path):
+            os.makedirs(path)
+        return path
+
+    def save(self, validated, numbered=False):
+        now = datetime.now().isoformat()
+        if validated.errors is None or len(validated.errors) == 0:
+            return delete_file_or_folder(self.report_filename)
+        errors = '\n'.join(validated.errors)
+        sep = '\n'*2
+        content = []
+        xml = validated.display(numbered)
+        if numbered:
+            content = [now, self.url, 'ERRORS\n'+'='*6, errors, '-'*30, xml]
+        else:
+            content = [xml, '-'*30, now, self.url, 'ERRORS\n'+'='*6, errors]
+
+        write_file(self.report_filename, sep.join(content))
 
 
 class DataHandler(object):
