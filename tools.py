@@ -211,9 +211,9 @@ def write_log(msg):
     error_report = open("reports/{0}_{1}_errors.txt".format(issn, now), "a")
     msg = u'%s\r\n' % msg
     try:
-        error_report.write(msg)
+        error_report.write(msg.encode('utf-8'))
     except:
-        logging.error('Error writing report line', exc_info=True)
+        logging.error('Error writing report line')
 
     error_report.close()
 
@@ -418,15 +418,7 @@ class XMLValidator(object):
                                 os.path.dirname(__file__),
                                 'xsd/ThomsonReuters_publishing.xsd'))
 
-    def validate_xml(self, collection, code):
-        textxml = self.get_xml(collection, code)
-        validated = ValidatedXML(textxml, self.xsd_filename)
-        collection_reports = Reports(collection, code)
-        collection_reports.register_result(validated)
-        if validated.errors is None or len(validated.errors) == 0:
-            return validated.parsed
-
-    def get_xml(self, collection, code):
+    def _get_xml(self, collection, code):
         articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
         params = {'collection': collection,
                   'code': code,
@@ -437,6 +429,14 @@ class XMLValidator(object):
         except:
             logging.error(
                 'error fetching url from articlemeta: %s' % articlemeta_url)
+
+    def validate_xml(self, collection, code):
+        textxml = self._get_xml(collection, code)
+        validated = ValidatedXML(textxml, self.xsd_filename)
+        article_report = ArticleReport(collection, code)
+        article_report.register_result(validated)
+        if validated.errors is None or len(validated.errors) == 0:
+            return validated.parsed
 
 
 class XML(object):
@@ -481,26 +481,6 @@ class ValidatedXML(object):
             self.errors = self.validate()
 
     @property
-    def parsed(self):
-        if self._xml is not None:
-            return self._xml.parsed
-
-    @property
-    def display_format(self):
-        if self._xml is not None:
-            return self._xml.display_format
-
-    @property
-    def numbered_lines(self):
-        if self._xml is not None:
-            lines = self.display_format.split('\n')
-            nlines = len(lines)
-            digits = len(str(nlines))
-            return '\n'.join(
-                [u'{}:{}'.format(str(n).zfill(digits), line)
-                 for n, line in zip(range(1,nlines), lines)])
-
-    @property
     def xml_schema(self):
         return self._xml_schema
 
@@ -509,6 +489,11 @@ class ValidatedXML(object):
         str_schema = open(xsd_filename, 'r')
         schema_doc = etree.parse(str_schema)
         self._xml_schema = etree.XMLSchema(schema_doc)
+
+    @property
+    def parsed(self):
+        if self._xml is not None:
+            return self._xml.parsed
 
     def validate(self):
         # Validating well formed
@@ -532,8 +517,19 @@ class ValidatedXML(object):
         except Exception as e:
             return [e]
 
+    def display(self, numbered_lines=False):
+        if self._xml is not None:
+            if numbered_lines:
+                lines = self._xml.display_format.split('\n')
+                nlines = len(lines)
+                digits = len(str(nlines))
+                return '\n'.join(
+                    [u'{}:{}'.format(str(n).zfill(digits), line)
+                     for n, line in zip(range(1, nlines), lines)])
+            return self._xml.display_format
 
-class Reports(object):
+
+class ArticleReport(object):
 
     def __init__(self, collection, code):
         self.collection = collection
@@ -555,6 +551,7 @@ class Reports(object):
         write_file(self.valid_items_report, now+' '+self.code+'\n', new=False)
 
     def register_result(self, validated, numbered=False):
+        now = datetime.now().isoformat()
         report_filename = '{}/{}.err'.format(self.issn_path, self.code)
 
         if validated.errors is None or len(validated.errors) == 0:
@@ -566,10 +563,11 @@ class Reports(object):
                     self.collection, self.code)
         sep = '\n'+'='*10+'\n'
         content = []
+        xml = validated.display(numbered)
         if numbered:
-            content = [url, errors, validated.numbered_lines]
+            content = [now, url, errors, xml]
         else:
-            content = [validated.display_format, url, errors]
+            content = [xml, now, url, errors]
 
         write_file(report_filename, sep.join(content))
 
