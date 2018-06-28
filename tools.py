@@ -477,7 +477,7 @@ class ValidatedXML(object):
         else:
             self._original_xml = XML(textxml)
             self._pretty_xml = XML(self._original_xml.pretty_text)
-            self.errors = self.validate()
+            self.errors = self._validate()
 
     @property
     def xml_schema(self):
@@ -494,12 +494,12 @@ class ValidatedXML(object):
         if self._original_xml is not None:
             return self._original_xml.parsed
 
-    def validate(self):
+    def _validate(self):
         # Validating well formed
         if len(self._pretty_xml.parse_errors) > 0:
             return self._pretty_xml.parse_errors
 
-        # Validating agains schema
+        # Validating against schema
         try:
             if self.xml_schema.validate(self._pretty_xml.parsed):
                 return []
