@@ -6,6 +6,7 @@ import shutil
 import zipfile
 from ftplib import FTP, error_perm
 import logging
+import contextlib
 
 import requests
 from pymongo import MongoClient
@@ -43,18 +44,20 @@ class FTPService(object):
 
     def __init__(
             self,
-            ftp_host='localhost',
+            host='localhost',
+            port='21',
             user='anonymous',
             passwd='anonymous'):
-        self.ftp_host = ftp_host
+        self.host = host
+        self.port = port
         self.user = user
         self.passwd = passwd
-        self.ftp = FTP()
+        self.ftp = None
 
     def connect(self, timeout=60):
         if self.ftp is None:
             self.ftp = FTP()
-        self.ftp.connect(self.ftp_host, timeout=timeout)
+        self.ftp.connect(self.host, self.port, timeout=timeout)
         self.ftp.login(user=self.user, passwd=self.passwd)
 
     def close(self):
@@ -63,47 +66,32 @@ class FTPService(object):
         except:
             self.ftp.close()
 
-    def mkdirs(self, dirs):
-        self.connect()
-        folders = dirs.split('/')
-        pwd = self.ftp.pwd()
-        for folder in folders:
-            try:
-                self.ftp.mkd(folder)
-            except:
-                logging.info('FTP: MKD (%s)' % (dirs, ), exc_info=True)
-            self.ftp.cwd(folder)
-        self.ftp.cwd(pwd)
+    @contextlib.contextmanager
+    def session_context(self, timeout=60):
+        self.connect(timeout)
+        yield
         self.close()
 
-    def send_file(self, local_filename, remote_filename):
-        self.connect(600)
-
-        f = open(local_filename, 'rd')
-        try:
-            self.ftp.storbinary('STOR {}'.format(remote_filename), f)
-        except:
-            logging.info(
-                'FTP: Unable to send %s to %s' %
-                (local_filename, remote_filename), exc_info=True)
-        f.close()
-        self.close()
-
-    def remove_files(self, dirs):
-        self.connect()
-        pwd = self.ftp.pwd()
-        try:
-            self.ftp.cwd(dirs)
-            files = self.ftp.nlst('*')
-            for file in files:
+    def mkdirs(self, dirs, timeout=60):
+        with self.session_context(timeout):
+            folders = dirs.split('/')
+            for folder in folders:
                 try:
-                    self.ftp.delete(file)
+                    self.ftp.mkd(folder)
                 except:
-                    logging.info('FTP: Unable to remove file: %s' % file)
-        except:
-            logging.info('FTP: Unable to remove: %s' % dirs)
-        self.ftp.cwd(pwd)
-        self.close()
+                    logging.info('FTP: MKD (%s)' % (dirs, ), exc_info=True)
+                self.ftp.cwd(folder)
+
+    def send_file(self, local_filename, remote_filename, timeout=60):
+        with self.session_context(timeout):
+            f = open(local_filename, 'rb')
+            try:
+                self.ftp.storbinary('STOR {}'.format(remote_filename), f)
+            except:
+                logging.info(
+                    'FTP: Unable to send %s to %s' %
+                    (local_filename, remote_filename), exc_info=True)
+            f.close()
 
 
 class CollectionReports(object):
@@ -120,9 +108,8 @@ class CollectionReports(object):
         self.zip_filename = os.path.join(
             zips_root_path, self.zipname_local)
 
-    def zip(self, delete=False):
+    def list_files(self, delete=False):
         rep_files = []
-        root_path = os.path.dirname(self.collection_reports_path)
         if os.path.isdir(self.collection_reports_path):
             for issn in os.listdir(self.collection_reports_path):
                 d = os.path.join(self.collection_reports_path, issn)
@@ -134,6 +121,11 @@ class CollectionReports(object):
                                     self.collection_name,
                                     issn,
                                     f))
+        return rep_files
+
+    def zip(self, delete=False):
+        root_path = os.path.dirname(self.collection_reports_path)
+        rep_files = self.list_files()
         delete_file_or_folder(self.zip_filename)
         update_zipfile(self.zip_filename, rep_files, root_path, delete=delete)
         if delete:
@@ -154,10 +146,10 @@ class CollectionReports(object):
                 delete_file_or_folder(self.zip_filename)
 
 
-def send_collections_reports(ftp_host, user, passwd,
+def send_collections_reports(ftp_host, ftp_user, ftp_passwd,
                              local_path='collections_reports',
                              remote_path='collections_reports'):
-    ftp_service = FTPService(ftp_host, user, passwd)
+    ftp_service = FTPService(ftp_host, user=ftp_user, passwd=ftp_passwd)
     reports_root_path = XML_ERRORS_ROOT_PATH
 
     zips_root_path = local_path
@@ -192,8 +184,8 @@ def update_zipfile(zip_filename, files, src_path, mode='a', delete=False):
     logging.debug('Files zipped into: %s' % zip_filename)
 
 
-def write_file(filename, content, new=True):
-    error_report = open(filename, 'w' if new else 'a')
+def write_file(filename, content, mode='w'):
+    error_report = open(filename, mode)
     content = content.encode('utf-8')
     try:
         error_report.write(content)
@@ -237,7 +229,7 @@ def send_to_ftp(file_name,
     target = 'scielo_{0}.zip'.format(now)
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    f = open('{0}'.format(file_name), 'rd')
+    f = open('{0}'.format(file_name), 'rb')
     ftp.storbinary('STOR inbound/{0}'.format(target), f)
     f.close()
     ftp.quit()
@@ -255,7 +247,7 @@ def send_take_off_files_to_ftp(ftp_host='localhost',
 
     for fl in os.listdir('controller'):
         if fl.split('.')[-1] == 'del':
-            f = open('controller/{0}'.format(fl), 'rd')
+            f = open('controller/{0}'.format(fl), 'rb')
             ftp.storbinary('STOR inbound/{0}'.format(fl), f)
             f.close()
             logging.debug('Takeoff file sent to ftp: %s' % fl)
