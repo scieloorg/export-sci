@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 import shutil
 import zipfile
-from ftplib import FTP, error_perm
+from ftplib import FTP, error_perm, all_errors
 import logging
 import contextlib
 
@@ -87,7 +87,7 @@ class FTPService(object):
             f = open(local_filename, 'rb')
             try:
                 self.ftp.storbinary('STOR {}'.format(remote_filename), f)
-            except:
+            except all_errors:
                 logging.info(
                     'FTP: Unable to send %s to %s' %
                     (local_filename, remote_filename), exc_info=True)
@@ -108,7 +108,7 @@ class CollectionReports(object):
         self.zip_filename = os.path.join(
             zips_root_path, self.zipname_local)
 
-    def list_files(self, delete=False):
+    def list(self):
         rep_files = []
         if os.path.isdir(self.collection_reports_path):
             for issn in os.listdir(self.collection_reports_path):
@@ -125,7 +125,7 @@ class CollectionReports(object):
 
     def zip(self, delete=False):
         root_path = os.path.dirname(self.collection_reports_path)
-        rep_files = self.list_files()
+        rep_files = self.list()
         delete_file_or_folder(self.zip_filename)
         update_zipfile(self.zip_filename, rep_files, root_path, delete=delete)
         if delete:
@@ -174,24 +174,21 @@ def update_zipfile(zip_filename, files, src_path, mode='a', delete=False):
             allowZip64=True) as zipf:
         for f in files:
             src = os.path.join(src_path, f)
-            logging.info('zipping %s to: %s' % (src, zip_filename))
-            try:
-                zipf.write(src, arcname=f)
-            except:
-                pass
+            zipf.write(src, arcname=f)
             if delete is True:
                 delete_file_or_folder(src)
-    logging.debug('Files zipped into: %s' % zip_filename)
+    logging.info('Files zipped into: %s' % zip_filename)
 
 
 def write_file(filename, content, mode='w'):
-    error_report = open(filename, mode)
     content = content.encode('utf-8')
-    try:
-        error_report.write(content)
-    except:
-        logging.error('Error writing file: %s' % filename, exc_info=True)
-    error_report.close()
+    with open(filename, mode) as f:
+        try:
+            f.write(content)
+        except (IOError, ValueError):
+            logging.error('Error writing file: %s' % filename, exc_info=True)
+        except:
+            logging.error('Error writing file: %s' % filename, exc_info=True)
 
 
 def write_log(msg):
@@ -417,17 +414,24 @@ class XMLValidator(object):
         try:
             return requests.get(
                 self.articlemeta_url, params=params, timeout=30).text
-        except:
+        except (
+                requests.ConnectionError,
+                requests.HTTPError,
+                requests.Timeout):
             logging.error(
                 'error fetching url: %s' % self.articlemeta_url)
 
     def validate_xml(self, collection, code):
         textxml = self._get_xml(collection, code)
         validated = ValidatedXML(textxml, self.xsd_filename)
-        article_report = ArticleReport(self.articlemeta_url, collection, code)
+        article_report = ArticleReport(
+                            self.articlemeta_url,
+                            collection,
+                            code,
+                            XML_ERRORS_ROOT_PATH)
         article_report.save(validated)
         if validated.errors is None or len(validated.errors) == 0:
-            return validated.parsed
+            return validated.tree
 
 
 class XML(object):
@@ -439,9 +443,9 @@ class XML(object):
 
     def _parse_xml(self):
         xml = StringIO(self.text)
-        self.parsed = None
+        self.tree = None
         try:
-            self.parsed = etree.parse(xml)
+            self.tree = etree.parse(xml)
         except etree.XMLSyntaxError as e:
             self.parse_errors.append(str(e))
         except Exception as e:
@@ -449,12 +453,12 @@ class XML(object):
 
     @property
     def pretty_text(self):
-        if self.parsed is None:
-            return self.text.replace('<', '\n<').replace('\n', '\n').strip()
+        if self.tree is None:
+            return self.text.replace('<', '\n<').replace('\n</', '</').strip()
         return etree.tostring(
-                self.parsed,
-                encoding='utf-8',
-                pretty_print=True).decode('utf-8')
+                self.tree,
+                encoding='unicode',
+                pretty_print=True)
 
 
 class ValidatedXML(object):
@@ -477,14 +481,14 @@ class ValidatedXML(object):
 
     @xml_schema.setter
     def xml_schema(self, xsd_filename):
-        str_schema = open(xsd_filename, 'r')
-        schema_doc = etree.parse(str_schema)
-        self._xml_schema = etree.XMLSchema(schema_doc)
+        with open(xsd_filename, 'r') as str_schema:
+            schema_doc = etree.parse(str_schema)
+            self._xml_schema = etree.XMLSchema(schema_doc)
 
     @property
-    def parsed(self):
+    def tree(self):
         if self._original_xml is not None:
-            return self._original_xml.parsed
+            return self._original_xml.tree
 
     def _validate(self):
         # Validating well formed
@@ -493,7 +497,9 @@ class ValidatedXML(object):
 
         # Validating against schema
         try:
-            if self.xml_schema.validate(self._pretty_xml.parsed):
+            if self.xml_schema is None:
+                return ['XMLSchema is not loaded']
+            if self.xml_schema.validate(self._pretty_xml.tree):
                 return []
         except etree.XMLSyntaxError as e:
             return [str(e)]
@@ -502,7 +508,7 @@ class ValidatedXML(object):
 
         # Capturing validation errors
         try:
-            self.xml_schema.assertValid(self._pretty_xml.parsed)
+            self.xml_schema.assertValid(self._pretty_xml.tree)
         except etree.DocumentInvalid as e:
             return [str(item) for item in e.error_log]
         except Exception as e:
@@ -522,10 +528,10 @@ class ValidatedXML(object):
 
 class ArticleReport(object):
 
-    def __init__(self, article_uri, collection, code):
+    def __init__(self, article_uri, collection, code, xml_error_root_path):
         self.collection = collection
         self.code = code
-        self.XML_ERRORS_ROOT_PATH = XML_ERRORS_ROOT_PATH
+        self.xml_error_root_path = xml_error_root_path
         self.report_filename = '{}/{}.err.txt'.format(
             self.issn_path, self.code)
         self.url = '{}/?collection={}&code={}&format=xmlwos\n'.format(
@@ -535,7 +541,7 @@ class ArticleReport(object):
     def issn_path(self):
         issn = self.code[1:10]
         path = '{}/{}/{}'.format(
-            self.XML_ERRORS_ROOT_PATH, self.collection, issn)
+            self.xml_error_root_path, self.collection, issn)
         if not os.path.isdir(path):
             os.makedirs(path)
         return path
