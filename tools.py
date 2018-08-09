@@ -187,8 +187,8 @@ def write_file(filename, content, mode='w'):
             f.write(content)
         except (IOError, ValueError):
             logging.error('Error writing file: %s' % filename, exc_info=True)
-        except:
-            logging.error('Error writing file: %s' % filename, exc_info=True)
+        except Exception as e:
+            logging.exception('tools.write_file(): %s' % filename, e)
 
 
 def write_log(msg):
@@ -196,12 +196,13 @@ def write_log(msg):
     issn = msg.split(':')[1][1:10]
     if not os.path.isdir("reports"):
         os.makedirs("reports")
-    error_report = open("reports/{0}_{1}_errors.txt".format(issn, now), "a")
+    filename = "reports/{0}_{1}_errors.txt".format(issn, now)
+    error_report = open(filename, "a")
     msg = u'%s\r\n' % msg
     try:
         error_report.write(msg.encode('utf-8'))
-    except:
-        logging.error('Error writing report line')
+    except Exception as e:
+        logging.exception('tools.write_log(%s): ' % filename, e)
 
     error_report.close()
 
@@ -401,10 +402,11 @@ def load_journals_list(journals_file='journals.txt'):
 class XMLValidator(object):
 
     def __init__(self):
-        self.xsd_filename = os.path.abspath(
+        xsd_filename = os.path.abspath(
                             os.path.join(
                                 os.path.dirname(__file__),
                                 'xsd/ThomsonReuters_publishing.xsd'))
+        self.validator = XMLValidatorWithSchema(xsd_filename)
         self.articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
 
     def _get_xml(self, collection, code):
@@ -418,20 +420,25 @@ class XMLValidator(object):
                 requests.ConnectionError,
                 requests.HTTPError,
                 requests.Timeout):
-            logging.error(
+            logging.info(
                 'error fetching url: %s' % self.articlemeta_url)
+
+    def validated_xml(self, textxml):
+        validated = ValidatedXML(textxml)
+        validated.validate(self.validator)
+        return validated
 
     def validate_xml(self, collection, code):
         textxml = self._get_xml(collection, code)
-        validated = ValidatedXML(textxml, self.xsd_filename)
+        validated_xml = self.validated_xml(textxml)
         article_report = ArticleReport(
                             self.articlemeta_url,
                             collection,
                             code,
                             XML_ERRORS_ROOT_PATH)
-        article_report.save(validated)
-        if validated.errors is None or len(validated.errors) == 0:
-            return validated.tree
+        article_report.save(validated_xml)
+        if validated_xml.errors is None or len(validated_xml.errors) == 0:
+            return validated_xml.tree
 
 
 class XML(object):
@@ -447,9 +454,11 @@ class XML(object):
         try:
             self.tree = etree.parse(xml)
         except etree.XMLSyntaxError as e:
-            self.parse_errors.append(str(e))
+            self.parse_errors.append(e.message)
         except Exception as e:
-            self.parse_errors.append(e)
+            msg = 'tools.XML._parse_xml(): Unknown error. '
+            logging.exception(msg, e)
+            self.parse_errors.append(msg)
 
     @property
     def pretty_text(self):
@@ -461,19 +470,10 @@ class XML(object):
                 pretty_print=True)
 
 
-class ValidatedXML(object):
+class XMLValidatorWithSchema(object):
 
-    def __init__(self, textxml, xsd_filename):
+    def __init__(self, xsd_filename):
         self.xml_schema = xsd_filename
-        self.errors = None
-        self._original_xml = None
-        self._pretty_xml = None
-        if textxml is None:
-            self.errors = ['XML is not available']
-        else:
-            self._original_xml = XML(textxml)
-            self._pretty_xml = XML(self._original_xml.pretty_text)
-            self.errors = self._validate()
 
     @property
     def xml_schema(self):
@@ -481,38 +481,67 @@ class ValidatedXML(object):
 
     @xml_schema.setter
     def xml_schema(self, xsd_filename):
-        with open(xsd_filename, 'r') as str_schema:
-            schema_doc = etree.parse(str_schema)
-            self._xml_schema = etree.XMLSchema(schema_doc)
+        try:
+            with open(xsd_filename, 'r') as str_schema:
+                schema_doc = etree.parse(str_schema)
+                self._xml_schema = etree.XMLSchema(schema_doc)
+        except (IOError, ValueError, etree.XMLSchemaError) as e:
+            logging.exception('tools.XMLValidatorWithSchema.xml_schema', e)
+
+    def validate(self, tree):
+        if self.xml_schema is None:
+            return 'XMLSchema is not loaded'
+
+        try:
+            self.xml_schema.validate(tree)
+        except etree.XMLSyntaxError as e:
+            return e.message
+        except Exception as e:
+            logging.exception('tools.XMLValidatorWithSchema.validate', e)
+
+        try:
+            self.xml_schema.assertValid(tree)
+        except etree.DocumentInvalid as e:
+            return e.message
+        except Exception as e:
+            logging.exception('tools.XMLValidatorWithSchema.assertValid', e)
+
+
+class ValidatedXML(object):
+
+    def __init__(self, textxml):
+        self._errors = []
+        self._original_xml = None
+        self._pretty_xml = None
+        if textxml is None:
+            self.errors = ['Empty XML']
+        else:
+            self._original_xml = XML(textxml)
+            self._pretty_xml = XML(self._original_xml.pretty_text)
+            self.errors = self._pretty_xml.parse_errors
 
     @property
     def tree(self):
         if self._original_xml is not None:
             return self._original_xml.tree
 
-    def _validate(self):
-        # Validating well formed
-        if len(self._pretty_xml.parse_errors) > 0:
-            return self._pretty_xml.parse_errors
+    @property
+    def errors(self):
+        return self._errors
 
-        # Validating against schema
-        try:
-            if self.xml_schema is None:
-                return ['XMLSchema is not loaded']
-            if self.xml_schema.validate(self._pretty_xml.tree):
-                return []
-        except etree.XMLSyntaxError as e:
-            return [str(e)]
-        except Exception as e:
-            return [e]
+    @errors.setter
+    def errors(self, messages):
+        if messages is not None:
+            if isinstance(messages, list):
+                self._errors.extend(messages)
+            else:
+                self._errors.append(messages)
 
-        # Capturing validation errors
-        try:
-            self.xml_schema.assertValid(self._pretty_xml.tree)
-        except etree.DocumentInvalid as e:
-            return [str(item) for item in e.error_log]
-        except Exception as e:
-            return [e]
+    def validate(self, validate_with_schema=None):
+        if len(self.errors) == 0:
+            if validate_with_schema is not None:
+                self.errors = validate_with_schema.validate(
+                    self._pretty_xml.tree)
 
     def display(self, numbered_lines=False):
         if self._original_xml is not None:
