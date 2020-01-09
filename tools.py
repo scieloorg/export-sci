@@ -19,7 +19,8 @@ wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
                      'le', 'mt', 'nd', 'oa', 'pr', 'pv', 'rc', 'rn', 'ra',
                      'sc', 'tr', 'up']
 
-wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 'sza', 'prt', 'cri', 'per', 'mex', 'ury', 'bol']
+wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 
+    'sza', 'prt', 'pry', 'cri', 'per', 'mex', 'ury', 'bol']
 
 XML_ERRORS_ROOT_PATH = 'xml_errors'
 
