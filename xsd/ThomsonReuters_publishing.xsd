@@ -2987,6 +2987,7 @@
 							<xs:enumeration value="SciELO Uruguay"/>
 							<xs:enumeration value="SciELO Venezuela"/>
 							<xs:enumeration value="SciELO Paraguay"/>
+							<xs:enumeration value="SciELO Ecuador"/>
 						</xs:restriction>
 					</xs:simpleType>
 				</xs:element>
