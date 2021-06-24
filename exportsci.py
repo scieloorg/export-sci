@@ -157,19 +157,22 @@ def run(task='add', clean_garbage=False, normalize=True):
             continue
 
         for total, current, document in documents:
-            if current == 1:
-                logger.info("validating xml's {0} for {1}".format(total, issn))
+            try:
+                if current == 1:
+                    logger.info("validating xml's {0} for {1}".format(total, issn))
 
-            logger.info("validating xml {0}/{1}".format(current, total))
+                logger.info("validating xml {0}/{1}".format(current, total))
 
-            #skip ahead documents
-            if 'v32' in document['article'] and 'ahead' in document['article']['v32'][0]['_'].lower():
-                continue
+                #skip ahead documents
+                if 'v32' in document['article'] and 'ahead' in document['article']['v32'][0]['_'].lower():
+                    continue
 
-            xml = xml_validator.validate_xml(document['collection'], document['code'])
+                xml = xml_validator.validate_xml(document['collection'], document['code'])
 
-            if xml:
-                global_xml.append(xml.find('article'))
+                if xml:
+                    global_xml.append(xml.find('article'))
+            except Exception as exc:
+                logger.exception('unhandled exception during validation of "%s"', document['code'])
 
         # Convertendo XML para texto
         try:
