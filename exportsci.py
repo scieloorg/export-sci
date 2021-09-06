@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import argparse
 import logging
@@ -156,6 +156,7 @@ def run(task='add', clean_garbage=False, normalize=True):
             logger.warning("File {0} already exists".format(xml_file_name))
             continue
 
+        proc_date_ctrl = ProcessingDateController(issn)
         for total, current, document in documents:
             try:
                 if current == 1:
@@ -167,6 +168,8 @@ def run(task='add', clean_garbage=False, normalize=True):
                 if 'v32' in document['article'] and 'ahead' in document['article']['v32'][0]['_'].lower():
                     continue
 
+                if skip_because_of_processing_date(proc_date_ctrl, document):
+                    continue
                 xml = xml_validator.validate_xml(document['collection'], document['code'])
 
                 if xml:
@@ -196,6 +199,84 @@ def run(task='add', clean_garbage=False, normalize=True):
                       ftp_host=FTP_HOST,
                       user=FTP_USER,
                       passwd=FTP_PASSWD)
+
+
+def skip_because_of_processing_date(proc_date_ctrl, document):
+    try:
+        processing_date = _get_processing_date(document)
+        if processing_date and processing_date < proc_date_ctrl.from_date:
+            logger.info(
+                'Skipping because of the processing date: %s < %s' %
+                (processing_date, proc_date_ctrl.from_date)
+            )
+            return True
+        proc_date_ctrl.save_most_recent_processing_date(processing_date)
+    except Exception as e:
+        logger.exception(
+            "Processing date [%s]: %s" % (document['code'], e)
+        )
+
+
+def _get_processing_date(document):
+    try:
+        return document['article'].get('v91', [{'_': ''}])[0]['_']
+    except (KeyError, IndexError, ValueError, TypeError):
+        return None
+
+
+class ProcessingDateController:
+
+    def __init__(self, issn, safer_days=None):
+        self._issn = issn
+        self._from_date = None
+        self._safer_days = safer_days or 10
+        self._file_path = "processing_dates/{}.txt".format(self._issn)
+        _dirname = os.path.dirname(self._file_path)
+        if not os.path.isdir(_dirname):
+            os.makedirs(_dirname)
+
+    @property
+    def from_date(self):
+        if self._from_date is None:
+            most_recent = self._read_most_recent_processing_date()
+            if most_recent:
+                self._from_date = _safer_date_range(
+                    most_recent, days=self._safer_days)
+            else:
+                self._from_date = _safer_date_range()
+        return self._from_date
+
+    def _read_most_recent_processing_date(self):
+        try:
+            with open(self._file_path, "r") as fp:
+                return fp.read()
+        except:
+            return None
+
+    def save_most_recent_processing_date(self, processing_date):
+        try:
+            if processing_date and processing_date > self.from_date:
+                with open(self._file_path, "w") as fp:
+                    fp.write(processing_date)
+        except:
+            return None
+
+
+def _yyyymmdd_to_datetime(YYYYMMDD):
+    try:
+        return datetime(
+            int(YYYYMMDD[:4]), int(YYYYMMDD[4:6]), int(YYYYMMDD[6:]))
+    except:
+        return None
+
+
+def _safer_date_range(_datetime=None, days=None):
+    days = days or 30
+    _datetime = _datetime or datetime.now()
+    if isinstance(_datetime, str):
+        _datetime = _yyyymmdd_to_datetime(_datetime)
+    d0 = _datetime - timedelta(days=days)
+    return d0.isoformat().replace("-", "")[:8]
 
 
 def main():
