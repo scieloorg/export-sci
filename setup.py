@@ -17,7 +17,7 @@ requires = [
 
 setup(
     name="exportsci",
-    version='0.6',
+    version='0.7',
     description="Export metadata to SciELO CI",
     author="SciELO",
     author_email="scielo-dev@googlegroups.com",
@@ -33,6 +33,10 @@ setup(
         "Topic :: System",
         "Topic :: Utilities",
     ],
+    packages=find_packages(
+        exclude=["*.tests", "*.tests.*", "tests.*", "tests", "docs"]
+    ),
+    test_suite="tests",
     install_requires=requires,
     entry_points="""\
     [console_scripts]
