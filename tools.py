@@ -13,6 +13,8 @@ from pymongo import MongoClient
 from lxml import etree
 from StringIO import StringIO
 
+from utils import earlier_datetime
+
 
 # SciELO article types stored in field v71 that are allowed to be sent to WoS
 wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
@@ -721,6 +723,59 @@ class DataHandler(object):
 
         if code_title:
             fltr.update({'code_title': code_title})
+
+        documents = []
+        total = 0
+        for document in self._articles_coll.find(fltr, {'code': 1}):
+            total += 1
+            documents.append([document['collection'], document['code']])
+
+        i = 0
+        for document in documents:
+            i += 1
+            yield [total, i, self_articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
+
+    def not_sent_with_proc_date(self, code_title=None, processing_date=None, publication_year=1800):
+        """
+        Implements an iterable article PID list not validated on SciELO.
+        sent_wos = False
+        """
+
+        fltr = {'sent_wos': 'False',
+                'applicable': 'True',
+                'collection': {'$in': wos_collections_allowed},
+                'publication_year': {'$gte': str(publication_year)}}
+
+        if code_title:
+            fltr.update({'code_title': code_title})
+        if processing_date:
+            _processing_date = earlier_datetime(processing_date)
+            fltr.update({'processing_date': {'$gte': _processing_date}})
+
+        documents = []
+        total = 0
+        for document in self._articles_coll.find(fltr, {'collection':1, 'code': 1}):
+            total += 1
+            documents.append([document['collection'], document['code']])
+
+        i = 0
+        for document in documents:
+            i = i + 1
+            yield [total, i, self._articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
+
+    def sent_to_wos_with_proc_date(self, code_title=None, processing_date=None):
+        """
+        Implements an iterable article PID list cotaining docs already sent to wos.
+        sent_wos = True
+        """
+
+        fltr = {'sent_wos': 'True'}
+
+        if code_title:
+            fltr.update({'code_title': code_title})
+        if processing_date:
+            _processing_date = earlier_datetime(processing_date)
+            fltr.update({'processing_date': {'$gte': _processing_date}})
 
         documents = []
         total = 0
