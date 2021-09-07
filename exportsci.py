@@ -157,6 +157,7 @@ def run(task='add', clean_garbage=False, normalize=True):
             continue
 
         proc_date_ctrl = ProcessingDateController(issn)
+        pids = []
         for total, current, document in documents:
             try:
                 if current == 1:
@@ -174,6 +175,7 @@ def run(task='add', clean_garbage=False, normalize=True):
 
                 if xml:
                     global_xml.append(xml.find('article'))
+                    pids.append(document['code'])
             except Exception as exc:
                 logger.exception('unhandled exception during validation of "%s"', document['code'])
 
@@ -189,6 +191,8 @@ def run(task='add', clean_garbage=False, normalize=True):
         xml_file = open(xml_file_name, 'w')
         xml_file.write(textxml)
         xml_file.close()
+
+        dh.mark_documents_as_sent_to_wos(pids)
 
     #zipping files
     files = os.listdir('xml')

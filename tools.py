@@ -657,6 +657,11 @@ class DataHandler(object):
         if remove_origin:
             os.remove('controller/validated_ids.txt')
 
+    def mark_documents_as_sent_to_wos(self, pids):
+        for pid in pids:
+            self._articles_coll.update(
+                {'code': pid}, {'$set': {'sent_wos': 'True'}}, multi=True
+            )
 
     def load_collections_metadata(self):
 
