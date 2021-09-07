@@ -126,6 +126,9 @@ def run(task='add', clean_garbage=False, normalize=True):
 
     xml_validator = tools.XMLValidator()
 
+    if not os.path.exists('xml'):
+        os.makedirs('xml')
+
     # Loading XML files
     for issn in issns:
         index_issn = index_issn + 1
@@ -141,8 +144,9 @@ def run(task='add', clean_garbage=False, normalize=True):
             documents = dh.not_sent(issn, publication_year=2002)
             xml_file_name = "xml/SciELO_{0}_{1}.xml".format(now, issn)
 
-        if not os.path.exists('xml'):
-            os.makedirs('xml')
+        if os.path.exists(xml_file_name):
+            logger.warning("File {0} already exists".format(xml_file_name))
+            continue
 
         nsmap = {
             'xml': 'http://www.w3.org/XML/1998/namespace',
@@ -151,10 +155,6 @@ def run(task='add', clean_garbage=False, normalize=True):
         global_xml = etree.Element('articles', nsmap=nsmap)
         global_xml.set('dtd-version', '1.10')
         global_xml.set('{http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation', 'ThomsonReuters_publishing_1.10.xsd')
-
-        if os.path.exists(xml_file_name):
-            logger.warning("File {0} already exists".format(xml_file_name))
-            continue
 
         proc_date_ctrl = ProcessingDateController(issn)
         pids = []
