@@ -1,8 +1,31 @@
 #coding: utf-8
 import os
+from datetime import datetime, timedelta
 import weakref
 
 from ConfigParser import SafeConfigParser
+
+
+def _yyyymmdd_to_datetime(YYYYMMDD):
+    try:
+        return datetime(
+            int(YYYYMMDD[:4]), int(YYYYMMDD[4:6]), int(YYYYMMDD[6:]))
+    except:
+        return None
+
+
+def earlier_yyyymmdd(yyyymmdd=None, days=None):
+    d0 = earlier_datetime(yyyymmdd, days)
+    return d0.isoformat().replace("-", "")[:8]
+
+
+def earlier_datetime(yyyymmdd=None, days=None):
+    days = days or 30
+    if isinstance(yyyymmdd, str):
+        _date = _yyyymmdd_to_datetime(yyyymmdd)
+    else:
+        _date = datetime.now()
+    return _date - timedelta(days=days)
 
 
 class SingletonMixin(object):
