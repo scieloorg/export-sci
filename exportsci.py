@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import argparse
 import logging
@@ -8,6 +8,9 @@ import logging
 import tools
 import utils
 from lxml import etree
+
+from utils import earlier_yyyymmdd
+
 
 logger = logging.getLogger(__name__)
 config = utils.Configuration.from_env()
@@ -244,10 +247,10 @@ class ProcessingDateController:
         if self._from_date is None:
             most_recent = self._read_most_recent_processing_date()
             if most_recent:
-                self._from_date = _safer_date_range(
+                self._from_date = earlier_yyyymmdd(
                     most_recent, days=self._safer_days)
             else:
-                self._from_date = _safer_date_range()
+                self._from_date = earlier_yyyymmdd()
         return self._from_date
 
     def _read_most_recent_processing_date(self):
@@ -264,23 +267,6 @@ class ProcessingDateController:
                     fp.write(processing_date)
         except:
             return None
-
-
-def _yyyymmdd_to_datetime(YYYYMMDD):
-    try:
-        return datetime(
-            int(YYYYMMDD[:4]), int(YYYYMMDD[4:6]), int(YYYYMMDD[6:]))
-    except:
-        return None
-
-
-def _safer_date_range(_datetime=None, days=None):
-    days = days or 30
-    _datetime = _datetime or datetime.now()
-    if isinstance(_datetime, str):
-        _datetime = _yyyymmdd_to_datetime(_datetime)
-    d0 = _datetime - timedelta(days=days)
-    return d0.isoformat().replace("-", "")[:8]
 
 
 def main():
