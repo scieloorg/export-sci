@@ -9,6 +9,9 @@ import tools
 import utils
 from lxml import etree
 
+from utils import earlier_yyyymmdd
+
+
 logger = logging.getLogger(__name__)
 config = utils.Configuration.from_env()
 settings = dict(config.items())['main:exportsci']
@@ -126,6 +129,9 @@ def run(task='add', clean_garbage=False, normalize=True):
 
     xml_validator = tools.XMLValidator()
 
+    if not os.path.exists('xml'):
+        os.makedirs('xml')
+
     # Loading XML files
     for issn in issns:
         index_issn = index_issn + 1
@@ -134,15 +140,36 @@ def run(task='add', clean_garbage=False, normalize=True):
             logger.debug("Issn {0} is available in the takeoff and keepinto file. For now this ISSN was ignored, and will not be send to WoS until it is removed from the takeoff file.".format(issn))
             continue
 
+        proc_date_ctrl = ProcessingDateController(issn)
+
         if task == 'update':
-            documents = dh.sent_to_wos(issn)
+            try:
+                documents = dh.sent_to_wos_with_proc_date(
+                    issn,
+                    proc_date_ctrl.from_date,
+                )
+            except:
+                documents = None
+            if documents is None:
+                documents = dh.sent_to_wos(issn)
+
             xml_file_name = "xml/SciELO_COR_{0}_{1}.xml".format(now, issn)
         elif task == 'add':
-            documents = dh.not_sent(issn, publication_year=2002)
+            try:
+                documents = dh.not_sent_with_proc_date(
+                    issn,
+                    proc_date_ctrl.from_date,
+                    publication_year=2002,
+                )
+            except:
+                documents = None
+            if documents is None:
+                documents = dh.not_sent(issn, publication_year=2002)
             xml_file_name = "xml/SciELO_{0}_{1}.xml".format(now, issn)
 
-        if not os.path.exists('xml'):
-            os.makedirs('xml')
+        if os.path.exists(xml_file_name):
+            logger.warning("File {0} already exists".format(xml_file_name))
+            continue
 
         nsmap = {
             'xml': 'http://www.w3.org/XML/1998/namespace',
@@ -152,10 +179,7 @@ def run(task='add', clean_garbage=False, normalize=True):
         global_xml.set('dtd-version', '1.10')
         global_xml.set('{http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation', 'ThomsonReuters_publishing_1.10.xsd')
 
-        if os.path.exists(xml_file_name):
-            logger.warning("File {0} already exists".format(xml_file_name))
-            continue
-
+        pids = []
         for total, current, document in documents:
             try:
                 if current == 1:
@@ -167,10 +191,13 @@ def run(task='add', clean_garbage=False, normalize=True):
                 if 'v32' in document['article'] and 'ahead' in document['article']['v32'][0]['_'].lower():
                     continue
 
+                if skip_because_of_processing_date(proc_date_ctrl, document):
+                    continue
                 xml = xml_validator.validate_xml(document['collection'], document['code'])
 
                 if xml:
                     global_xml.append(xml.find('article'))
+                    pids.append(document['code'])
             except Exception as exc:
                 logger.exception('unhandled exception during validation of "%s"', document['code'])
 
@@ -187,6 +214,8 @@ def run(task='add', clean_garbage=False, normalize=True):
         xml_file.write(textxml)
         xml_file.close()
 
+        dh.mark_documents_as_sent_to_wos(pids)
+
     #zipping files
     files = os.listdir('xml')
     zipped_file_name = tools.packing_zip(files)
@@ -196,6 +225,67 @@ def run(task='add', clean_garbage=False, normalize=True):
                       ftp_host=FTP_HOST,
                       user=FTP_USER,
                       passwd=FTP_PASSWD)
+
+
+def skip_because_of_processing_date(proc_date_ctrl, document):
+    try:
+        processing_date = _get_processing_date(document)
+        if processing_date and processing_date < proc_date_ctrl.from_date:
+            logger.info(
+                'Skipping because of the processing date: %s < %s' %
+                (processing_date, proc_date_ctrl.from_date)
+            )
+            return True
+        proc_date_ctrl.save_most_recent_processing_date(processing_date)
+    except Exception as e:
+        logger.exception(
+            "Processing date [%s]: %s" % (document['code'], e)
+        )
+
+
+def _get_processing_date(document):
+    try:
+        return document['article'].get('v91', [{'_': ''}])[0]['_']
+    except (KeyError, IndexError, ValueError, TypeError):
+        return None
+
+
+class ProcessingDateController:
+
+    def __init__(self, issn, safer_days=None):
+        self._issn = issn
+        self._from_date = None
+        self._safer_days = safer_days or 10
+        self._file_path = "processing_dates/{}.txt".format(self._issn)
+        _dirname = os.path.dirname(self._file_path)
+        if not os.path.isdir(_dirname):
+            os.makedirs(_dirname)
+
+    @property
+    def from_date(self):
+        if self._from_date is None:
+            most_recent = self._read_most_recent_processing_date()
+            if most_recent:
+                self._from_date = earlier_yyyymmdd(
+                    most_recent, days=self._safer_days)
+            else:
+                self._from_date = earlier_yyyymmdd()
+        return self._from_date
+
+    def _read_most_recent_processing_date(self):
+        try:
+            with open(self._file_path, "r") as fp:
+                return fp.read()
+        except:
+            return None
+
+    def save_most_recent_processing_date(self, processing_date):
+        try:
+            if processing_date and processing_date > self.from_date:
+                with open(self._file_path, "w") as fp:
+                    fp.write(processing_date)
+        except:
+            return None
 
 
 def main():
