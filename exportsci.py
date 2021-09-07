@@ -140,11 +140,31 @@ def run(task='add', clean_garbage=False, normalize=True):
             logger.debug("Issn {0} is available in the takeoff and keepinto file. For now this ISSN was ignored, and will not be send to WoS until it is removed from the takeoff file.".format(issn))
             continue
 
+        proc_date_ctrl = ProcessingDateController(issn)
+
         if task == 'update':
-            documents = dh.sent_to_wos(issn)
+            try:
+                documents = dh.sent_to_wos_with_proc_date(
+                    issn,
+                    proc_date_ctrl.from_date,
+                )
+            except:
+                documents = None
+            if documents is None:
+                documents = dh.sent_to_wos(issn)
+
             xml_file_name = "xml/SciELO_COR_{0}_{1}.xml".format(now, issn)
         elif task == 'add':
-            documents = dh.not_sent(issn, publication_year=2002)
+            try:
+                documents = dh.not_sent_with_proc_date(
+                    issn,
+                    proc_date_ctrl.from_date,
+                    publication_year=2002,
+                )
+            except:
+                documents = None
+            if documents is None:
+                documents = dh.not_sent(issn, publication_year=2002)
             xml_file_name = "xml/SciELO_{0}_{1}.xml".format(now, issn)
 
         if os.path.exists(xml_file_name):
@@ -159,7 +179,6 @@ def run(task='add', clean_garbage=False, normalize=True):
         global_xml.set('dtd-version', '1.10')
         global_xml.set('{http://www.w3.org/2001/XMLSchema-instance}noNamespaceSchemaLocation', 'ThomsonReuters_publishing_1.10.xsd')
 
-        proc_date_ctrl = ProcessingDateController(issn)
         pids = []
         for total, current, document in documents:
             try:
