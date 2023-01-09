@@ -293,6 +293,12 @@ class ProcessingDateController:
 
 
 def main():
+    here = os.path.abspath(os.path.dirname(__file__))
+    with open(os.path.join(here, 'VERSION')) as f:
+        VERSION = f.read()
+        print("Export SciELOCI %s" % VERSION)
+
+
     parser = argparse.ArgumentParser(
         description="Control the process of sending metadata to WoS")
 
@@ -330,5 +336,5 @@ def main():
     args = parser.parse_args()
 
     _config_logging(args.logging_level, args.logging_file)
-
+    logging.debug("Export SciELOCI %s" % VERSION)
     run(task=str(args.task), clean_garbage=bool(args.clean_garbage))
