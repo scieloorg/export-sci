@@ -698,7 +698,7 @@ class DataHandler(object):
 
         if code_title:
             fltr.update({'code_title': code_title})
-
+        logging.debug('Select documents: %s' % str(fltr))
         documents = []
         total = 0
         for document in self._articles_coll.find(fltr, {'collection':1, 'code': 1}):
@@ -708,6 +708,7 @@ class DataHandler(object):
         i = 0
         for document in documents:
             i = i + 1
+            logging.debug('Selected document: %s' % str(document))
             yield [total, i, self._articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
 
     def sent_to_wos(self, code_title=None):
@@ -749,6 +750,8 @@ class DataHandler(object):
             _processing_date = earlier_datetime(processing_date)
             fltr.update({'processing_date': {'$gte': _processing_date}})
 
+        logging.debug('Select documents: %s' % str(fltr))
+
         documents = []
         total = 0
         for document in self._articles_coll.find(fltr, {'collection':1, 'code': 1}):
@@ -758,6 +761,7 @@ class DataHandler(object):
         i = 0
         for document in documents:
             i = i + 1
+            logging.debug('Selected document: %s' % str(document))
             yield [total, i, self._articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
 
     def sent_to_wos_with_proc_date(self, code_title=None, processing_date=None):
