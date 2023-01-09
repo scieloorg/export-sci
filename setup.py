@@ -8,6 +8,9 @@ with open(os.path.join(here, 'README.rst')) as f:
     README = f.read()
 with open(os.path.join(here, 'CHANGES.rst')) as f:
     CHANGES = f.read()
+with open(os.path.join(here, 'VERSION')) as f:
+    VERSION = f.read()
+
 
 requires = [
     'requests>=2.18.1',
@@ -17,7 +20,7 @@ requires = [
 
 setup(
     name="exportsci",
-    version='0.7',
+    version=VERSION,
     description="Export metadata to SciELO CI",
     author="SciELO",
     author_email="scielo-dev@googlegroups.com",

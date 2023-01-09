@@ -6,3 +6,5 @@ ftp_passwd =
 mongodb_host = 127.0.0.1
 mongodb_port = 27017
 mongodb_slaveok = 0
+# acronym of the collections separated by comma
+wos_collections_allowed = arg,bol,chl,col,cri,cub,ecu,esp,mex,per,prt,pry,scl,sza,ury,ven
