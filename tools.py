@@ -21,9 +21,6 @@ wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
                      'le', 'mt', 'nd', 'oa', 'pr', 'pv', 'rc', 'rn', 'ra',
                      'sc', 'tr', 'up']
 
-wos_collections_allowed = ['scl', 'arg', 'cub', 'esp', 'col', 'ven', 'chl', 
-    'sza', 'prt', 'pry', 'cri', 'per', 'mex', 'ury', 'bol']
-
 XML_ERRORS_ROOT_PATH = 'xml_errors'
 
 
@@ -688,7 +685,7 @@ class DataHandler(object):
                     {'collection': document['collection'], 'code': document['code']}, {'$set': {'applicable': 'True'}}
                 )
 
-    def not_sent(self, code_title=None, publication_year=1800):
+    def not_sent(self, wos_collections_allowed, code_title=None, publication_year=1800):
         """
         Implements an iterable article PID list not validated on SciELO.
         sent_wos = False
@@ -735,7 +732,7 @@ class DataHandler(object):
             i += 1
             yield [total, i, self_articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
 
-    def not_sent_with_proc_date(self, code_title=None, processing_date=None, publication_year=1800):
+    def not_sent_with_proc_date(self, wos_collections_allowed, code_title=None, processing_date=None, publication_year=1800):
         """
         Implements an iterable article PID list not validated on SciELO.
         sent_wos = False

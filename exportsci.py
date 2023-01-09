@@ -21,6 +21,7 @@ FTP_USER = settings['ftp_user']
 FTP_PASSWD = settings['ftp_passwd']
 MONGODB_HOST = settings['mongodb_host']
 MONGODB_SLAVEOK = bool(settings['mongodb_slaveok'])
+WOS_COLLECTIONS_ALLOWED = settings['wos_collections_allowed'].strip().split(",")
 
 
 def _config_logging(logging_level='INFO', logging_file=None):
@@ -157,6 +158,7 @@ def run(task='add', clean_garbage=False, normalize=True):
         elif task == 'add':
             try:
                 documents = dh.not_sent_with_proc_date(
+                    WOS_COLLECTIONS_ALLOWED,
                     issn,
                     proc_date_ctrl.from_date,
                     publication_year=2002,
@@ -164,7 +166,9 @@ def run(task='add', clean_garbage=False, normalize=True):
             except:
                 documents = None
             if documents is None:
-                documents = dh.not_sent(issn, publication_year=2002)
+                documents = dh.not_sent(
+                    WOS_COLLECTIONS_ALLOWED,
+                    issn, publication_year=2002)
             xml_file_name = "xml/SciELO_{0}_{1}.xml".format(now, issn)
 
         if os.path.exists(xml_file_name):
