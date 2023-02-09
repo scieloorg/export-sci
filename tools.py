@@ -405,7 +405,7 @@ class XMLValidator(object):
         xsd_filename = os.path.abspath(
                             os.path.join(
                                 os.path.dirname(__file__),
-                                'xsd/ThomsonReuters_publishing.xsd'))
+                                'xsd/Clarivate_publishing.xsd'))
         self.validator = XMLValidatorWithSchema(xsd_filename)
         self.articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
 
