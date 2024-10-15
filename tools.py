@@ -24,6 +24,23 @@ wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
 XML_ERRORS_ROOT_PATH = 'xml_errors'
 
 
+def remove_contrib_id(text):
+    if '</contrib-id>' not in text:
+        return False, text
+    try:
+        p = text.find("<article")
+        pref = text[:p]
+        xml = text[p:]
+        xmltree = etree.fromstring(xml)
+        for contrib_id in xmltree.findall(".//contrib-id"):
+            parent = contrib_id.getparent()
+            parent.remove(contrib_id)
+        return True, pref + etree.tostring(xmltree, encoding="utf-8").decode("utf-8")
+    except Exception as e:
+        logging.exception("Unable to remove contrib-id %s" % str(e))
+        return False, text
+
+
 def delete_file_or_folder(path):
     if os.path.isdir(path):
         for item in os.listdir(path):
@@ -430,7 +447,14 @@ class XMLValidator(object):
 
     def validate_xml(self, collection, code):
         textxml = self._get_xml(collection, code)
+
         validated_xml = self.validated_xml(textxml)
+
+        if validated_xml.errors:
+            removed, textxml = remove_contrib_id(textxml)
+            if removed:
+                validated_xml = self.validated_xml(textxml)
+
         article_report = ArticleReport(
                             self.articlemeta_url,
                             collection,
