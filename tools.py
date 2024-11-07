@@ -27,18 +27,15 @@ XML_ERRORS_ROOT_PATH = 'xml_errors'
 def remove_contrib_id(text):
     if '</contrib-id>' not in text:
         return False, text
-    try:
-        p = text.find("<article")
-        pref = text[:p]
-        xml = text[p:]
-        xmltree = etree.fromstring(xml)
-        for contrib_id in xmltree.findall(".//contrib-id"):
-            parent = contrib_id.getparent()
-            parent.remove(contrib_id)
-        return True, pref + etree.tostring(xmltree, encoding="utf-8").decode("utf-8")
-    except Exception as e:
-        logging.exception("Unable to remove contrib-id %s" % str(e))
-        return False, text
+
+    p = text.find("<article")
+    pref = text[:p]
+    xml = text[p:]
+    xmltree = etree.fromstring(xml)
+    for contrib_id in xmltree.findall(".//contrib-id"):
+        parent = contrib_id.getparent()
+        parent.remove(contrib_id)
+    return True, pref + etree.tostring(xmltree, encoding="utf-8").decode("utf-8")
 
 
 def delete_file_or_folder(path):
@@ -430,15 +427,8 @@ class XMLValidator(object):
         params = {'collection': collection,
                   'code': code,
                   'format': 'xmlwos'}
-        try:
-            return requests.get(
-                self.articlemeta_url, params=params, timeout=30).text
-        except (
-                requests.ConnectionError,
-                requests.HTTPError,
-                requests.Timeout):
-            logging.info(
-                'error fetching url: %s' % self.articlemeta_url)
+        return requests.get(
+            self.articlemeta_url, params=params, timeout=30).text
 
     def validated_xml(self, textxml):
         validated = ValidatedXML(textxml)
