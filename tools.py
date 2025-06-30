@@ -17,15 +17,35 @@ from utils import earlier_datetime
 
 
 # SciELO article types stored in field v71 that are allowed to be sent to WoS
-wos_article_types = ['ab', 'an', 'ax', 'co', 'cr', 'ct', 'ed', 'er', 'in',
-                     'le', 'mt', 'nd', 'oa', 'pr', 'pv', 'rc', 'rn', 'ra',
-                     'sc', 'tr', 'up']
+wos_article_types = [
+    "ab",
+    "an",
+    "ax",
+    "co",
+    "cr",
+    "ct",
+    "ed",
+    "er",
+    "in",
+    "le",
+    "mt",
+    "nd",
+    "oa",
+    "pr",
+    "pv",
+    "rc",
+    "rn",
+    "ra",
+    "sc",
+    "tr",
+    "up",
+]
 
-XML_ERRORS_ROOT_PATH = 'xml_errors'
+XML_ERRORS_ROOT_PATH = "xml_errors"
 
 
 def remove_contrib_id(text):
-    if '</contrib-id>' not in text:
+    if "</contrib-id>" not in text:
         return False, text
 
     p = text.find("<article")
@@ -41,27 +61,24 @@ def remove_contrib_id(text):
 def delete_file_or_folder(path):
     if os.path.isdir(path):
         for item in os.listdir(path):
-            delete_file_or_folder(path + '/' + item)
+            delete_file_or_folder(path + "/" + item)
         try:
             shutil.rmtree(path)
         except:
-            logging.info('Unable to delete: %s' % path)
+            logging.info("Unable to delete: %s" % path)
 
     elif os.path.isfile(path):
         try:
             os.unlink(path)
         except:
-            logging.info('Unable to delete: %s' % path)
+            logging.info("Unable to delete: %s" % path)
 
 
 class FTPService(object):
 
     def __init__(
-            self,
-            host='localhost',
-            port='21',
-            user='anonymous',
-            passwd='anonymous'):
+        self, host="localhost", port="21", user="anonymous", passwd="anonymous"
+    ):
         self.host = host
         self.port = port
         self.user = user
@@ -88,23 +105,24 @@ class FTPService(object):
 
     def mkdirs(self, dirs, timeout=60):
         with self.session_context(timeout):
-            folders = dirs.split('/')
+            folders = dirs.split("/")
             for folder in folders:
                 try:
                     self.ftp.mkd(folder)
                 except:
-                    logging.info('FTP: MKD (%s)' % (dirs, ), exc_info=True)
+                    logging.info("FTP: MKD (%s)" % (dirs,), exc_info=True)
                 self.ftp.cwd(folder)
 
     def send_file(self, local_filename, remote_filename, timeout=60):
         with self.session_context(timeout):
-            f = open(local_filename, 'rb')
+            f = open(local_filename, "rb")
             try:
-                self.ftp.storbinary('STOR {}'.format(remote_filename), f)
+                self.ftp.storbinary("STOR {}".format(remote_filename), f)
             except all_errors:
                 logging.info(
-                    'FTP: Unable to send %s to %s' %
-                    (local_filename, remote_filename), exc_info=True)
+                    "FTP: Unable to send %s to %s" % (local_filename, remote_filename),
+                    exc_info=True,
+                )
             f.close()
 
 
@@ -113,14 +131,12 @@ class CollectionReports(object):
     def __init__(self, collection_name, reports_root_path, zips_root_path):
         _date = datetime.now().isoformat()[:16]
         _date = _date[:10]
-        _date = _date.replace(':', '').replace('-', '').replace('T', '_')
+        _date = _date.replace(":", "").replace("-", "").replace("T", "_")
         self.collection_name = collection_name
-        self.collection_reports_path = os.path.join(
-            reports_root_path, collection_name)
-        self.zipname_local = collection_name+'.zip'
-        self.zipname_remote = collection_name+'_'+_date+'.zip'
-        self.zip_filename = os.path.join(
-            zips_root_path, self.zipname_local)
+        self.collection_reports_path = os.path.join(reports_root_path, collection_name)
+        self.zipname_local = collection_name + ".zip"
+        self.zipname_remote = collection_name + "_" + _date + ".zip"
+        self.zip_filename = os.path.join(zips_root_path, self.zipname_local)
 
     def list(self):
         rep_files = []
@@ -131,10 +147,9 @@ class CollectionReports(object):
                     for f in os.listdir(d):
                         filename = os.path.join(d, f)
                         if os.path.isfile(filename):
-                            rep_files.append('{}/{}/{}'.format(
-                                    self.collection_name,
-                                    issn,
-                                    f))
+                            rep_files.append(
+                                "{}/{}/{}".format(self.collection_name, issn, f)
+                            )
         return rep_files
 
     def zip(self, delete=False):
@@ -146,23 +161,26 @@ class CollectionReports(object):
             delete_file_or_folder(self.collection_reports_path)
 
     def ftp(self, ftp_service, remote_root_path, delete=False):
-        logging.info('ftp.send %s' % self.zip_filename)
+        logging.info("ftp.send %s" % self.zip_filename)
         if os.path.isfile(self.zip_filename):
 
-            logging.info('ftp.mkdirs %s' % remote_root_path)
+            logging.info("ftp.mkdirs %s" % remote_root_path)
             ftp_service.mkdirs(remote_root_path)
 
             remote = os.path.join(remote_root_path, self.zipname_remote)
-            logging.info(
-                'ftp.send_file %s to %s' % (self.zip_filename, remote))
+            logging.info("ftp.send_file %s to %s" % (self.zip_filename, remote))
             sent = ftp_service.send_file(self.zip_filename, remote)
             if sent is not False and delete:
                 delete_file_or_folder(self.zip_filename)
 
 
-def send_collections_reports(ftp_host, ftp_user, ftp_passwd,
-                             local_path='collections_reports',
-                             remote_path='collections_reports'):
+def send_collections_reports(
+    ftp_host,
+    ftp_user,
+    ftp_passwd,
+    local_path="collections_reports",
+    remote_path="collections_reports",
+):
     ftp_service = FTPService(ftp_host, user=ftp_user, passwd=ftp_passwd)
     reports_root_path = XML_ERRORS_ROOT_PATH
 
@@ -175,55 +193,52 @@ def send_collections_reports(ftp_host, ftp_user, ftp_passwd,
         path = os.path.join(reports_root_path, collection_name)
         if os.path.isdir(path):
             reports = CollectionReports(
-                        collection_name, reports_root_path, zips_root_path)
+                collection_name, reports_root_path, zips_root_path
+            )
             reports.zip(delete=False)
             reports.ftp(ftp_service, remote_path, delete=True)
 
 
-def update_zipfile(zip_filename, files, src_path, mode='a', delete=False):
+def update_zipfile(zip_filename, files, src_path, mode="a", delete=False):
     with zipfile.ZipFile(
-            zip_filename,
-            mode,
-            compression=zipfile.ZIP_DEFLATED,
-            allowZip64=True) as zipf:
+        zip_filename, mode, compression=zipfile.ZIP_DEFLATED, allowZip64=True
+    ) as zipf:
         for f in files:
             src = os.path.join(src_path, f)
             zipf.write(src, arcname=f)
             if delete is True:
                 delete_file_or_folder(src)
-    logging.info('Files zipped into: %s' % zip_filename)
+    logging.info("Files zipped into: %s" % zip_filename)
 
 
-def write_file(filename, content, mode='w'):
-    content = content.encode('utf-8')
+def write_file(filename, content, mode="w"):
+    content = content.encode("utf-8")
     with open(filename, mode) as f:
         try:
             f.write(content)
         except (IOError, ValueError):
-            logging.error('Error writing file: %s' % filename, exc_info=True)
+            logging.error("Error writing file: %s" % filename, exc_info=True)
         except Exception as e:
-            logging.exception('tools.write_file(): %s' % filename, e)
+            logging.exception("tools.write_file(): %s" % filename, e)
 
 
 def write_log(msg):
     now = datetime.now().isoformat()[0:10]
-    issn = msg.split(':')[1][1:10]
+    issn = msg.split(":")[1][1:10]
     if not os.path.isdir("reports"):
         os.makedirs("reports")
     filename = "reports/{0}_{1}_errors.txt".format(issn, now)
     error_report = open(filename, "a")
-    msg = u'%s\r\n' % msg
+    msg = "%s\r\n" % msg
     try:
-        error_report.write(msg.encode('utf-8'))
+        error_report.write(msg.encode("utf-8"))
     except Exception as e:
-        logging.exception('tools.write_log(%s): ' % filename, e)
+        logging.exception("tools.write_log(%s): " % filename, e)
 
     error_report.close()
 
 
-def ftp_connect(ftp_host='localhost',
-                user='anonymous',
-                passwd='anonymous'):
+def ftp_connect(ftp_host="localhost", user="anonymous", passwd="anonymous"):
 
     ftp = FTP(ftp_host)
     ftp.login(user=user, passwd=passwd)
@@ -231,140 +246,139 @@ def ftp_connect(ftp_host='localhost',
     return ftp
 
 
-def send_to_ftp(file_name,
-                ftp_host='localhost',
-                user='anonymous',
-                passwd='anonymous'):
+def send_to_ftp(file_name, ftp_host="localhost", user="anonymous", passwd="anonymous"):
 
     now = datetime.now().isoformat()[0:10]
 
-    target = 'scielo_{0}.zip'.format(now)
+    target = "scielo_{0}.zip".format(now)
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    f = open('{0}'.format(file_name), 'rb')
-    ftp.storbinary('STOR inbound/{0}'.format(target), f)
+    f = open("{0}".format(file_name), "rb")
+    ftp.storbinary("STOR inbound/{0}".format(target), f)
     f.close()
     ftp.quit()
-    logging.debug('file sent to ftp: %s' % target)
+    logging.debug("file sent to ftp: %s" % target)
 
     send_collections_reports(ftp_host, user, passwd)
 
 
-def send_take_off_files_to_ftp(ftp_host='localhost',
-                               user='anonymous',
-                               passwd='anonymous',
-                               remove_origin=False):
+def send_take_off_files_to_ftp(
+    ftp_host="localhost", user="anonymous", passwd="anonymous", remove_origin=False
+):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
 
-    for fl in os.listdir('controller'):
-        if fl.split('.')[-1] == 'del':
-            f = open('controller/{0}'.format(fl), 'rb')
-            ftp.storbinary('STOR inbound/{0}'.format(fl), f)
+    for fl in os.listdir("controller"):
+        if fl.split(".")[-1] == "del":
+            f = open("controller/{0}".format(fl), "rb")
+            ftp.storbinary("STOR inbound/{0}".format(fl), f)
             f.close()
-            logging.debug('Takeoff file sent to ftp: %s' % fl)
+            logging.debug("Takeoff file sent to ftp: %s" % fl)
 
             if remove_origin:
-                os.remove('controller/{0}'.format(fl))
-                logging.debug('Takeoff file removed from origin: %s' % fl)
+                os.remove("controller/{0}".format(fl))
+                logging.debug("Takeoff file removed from origin: %s" % fl)
 
     ftp.quit()
 
 
-def remove_previous_unbound_files_from_ftp(ftp_host='localhost',
-                           user='anonymous',
-                           passwd='anonymous',
-                           remove_origin=False):
+def remove_previous_unbound_files_from_ftp(
+    ftp_host="localhost", user="anonymous", passwd="anonymous", remove_origin=False
+):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    ftp.cwd('inbound')
-    report_files = ftp.nlst('*')
+    ftp.cwd("inbound")
+    report_files = ftp.nlst("*")
 
     for report_file in report_files:
-        logging.debug('Previous unbound files removed from ftp: %s' % report_file)
+        logging.debug("Previous unbound files removed from ftp: %s" % report_file)
         ftp.delete(report_file)
 
 
-def get_sync_file_from_ftp(ftp_host='localhost',
-                           user='anonymous',
-                           passwd='anonymous',
-                           remove_origin=False):
+def get_sync_file_from_ftp(
+    ftp_host="localhost", user="anonymous", passwd="anonymous", remove_origin=False
+):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    ftp.cwd('reports')
-    report_files = ftp.nlst('SCIELO_ProcessedRecordIds*')
-    with open('controller/validated_ids.txt', 'wb') as f:
+    ftp.cwd("reports")
+    report_files = ftp.nlst("SCIELO_ProcessedRecordIds*")
+    with open("controller/validated_ids.txt", "wb") as f:
+
         def callback(data):
             f.write(data)
+
         for report_file in report_files:
-            ftp.retrbinary('RETR %s' % report_file, callback)
+            ftp.retrbinary("RETR %s" % report_file, callback)
 
     ftp.quit()
     f.close()
 
     if remove_origin:
         for report_file in report_files:
-            logging.debug('Syncronization files removed from ftp: %s' % report_file)
+            logging.debug("Syncronization files removed from ftp: %s" % report_file)
             ftp.delete(report_file)
 
 
-def get_to_update_file_from_ftp(ftp_host='localhost',
-                                user='anonymous',
-                                passwd='anonymous',
-                                remove_origin=False):
+def get_to_update_file_from_ftp(
+    ftp_host="localhost", user="anonymous", passwd="anonymous", remove_origin=False
+):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    ftp.cwd('controller')
-    with open('controller/toupdate.txt', 'wb') as f:
+    ftp.cwd("controller")
+    with open("controller/toupdate.txt", "wb") as f:
+
         def callback(data):
             f.write(data)
+
         try:
-            ftp.retrbinary('RETR %s' % 'toupdate.txt', callback)
+            ftp.retrbinary("RETR %s" % "toupdate.txt", callback)
         except error_perm:
             return None
 
     if remove_origin:
-        ftp.delete('toupdate.txt')
+        ftp.delete("toupdate.txt")
 
     ftp.quit()
     f.close()
 
 
-def get_keep_into_file_from_ftp(ftp_host='localhost',
-                                user='anonymous',
-                                passwd='anonymous',
-                                remove_origin=False):
+def get_keep_into_file_from_ftp(
+    ftp_host="localhost", user="anonymous", passwd="anonymous", remove_origin=False
+):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    ftp.cwd('controller')
-    with open('controller/keepinto.txt', 'wb') as f:
+    ftp.cwd("controller")
+    with open("controller/keepinto.txt", "wb") as f:
+
         def callback(data):
             f.write(data)
+
         try:
-            ftp.retrbinary('RETR %s' % 'keepinto.txt', callback)
+            ftp.retrbinary("RETR %s" % "keepinto.txt", callback)
         except error_perm:
             return None
 
     if remove_origin:
-        ftp.delete('keepinto.txt')
+        ftp.delete("keepinto.txt")
 
     ftp.quit()
     f.close()
 
 
-def get_take_off_files_from_ftp(ftp_host='localhost',
-                                user='anonymous',
-                                passwd='anonymous',
-                                remove_origin=False):
+def get_take_off_files_from_ftp(
+    ftp_host="localhost", user="anonymous", passwd="anonymous", remove_origin=False
+):
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
-    ftp.cwd('controller')
-    report_files = ftp.nlst('takeoff_*.del')
-    with open('controller/takeoff.txt', 'wb') as f:
+    ftp.cwd("controller")
+    report_files = ftp.nlst("takeoff_*.del")
+    with open("controller/takeoff.txt", "wb") as f:
+
         def callback(data):
             f.write(data)
+
         for report_file in report_files:
-            ftp.retrbinary('RETR %s' % report_file, callback)
+            ftp.retrbinary("RETR %s" % report_file, callback)
 
     if remove_origin:
         for report_file in report_files:
@@ -377,35 +391,41 @@ def get_take_off_files_from_ftp(ftp_host='localhost',
 def packing_zip(files):
     now = datetime.now().isoformat()[0:10]
 
-    target = 'scielo_{0}.zip'.format(now)
+    target = "scielo_{0}.zip".format(now)
 
-    logging.info('zipping XML files to: %s' % target)
+    logging.info("zipping XML files to: %s" % target)
 
-    with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zipf:
+    with zipfile.ZipFile(
+        target, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True
+    ) as zipf:
         for xml_file in files:
-            zipf.write('xml/{0}'.format(xml_file), arcname=xml_file)
+            zipf.write("xml/{0}".format(xml_file), arcname=xml_file)
 
-    logging.debug('Files zipped into: %s' % target)
+    logging.debug("Files zipped into: %s" % target)
 
     return target
 
 
-def load_journals_list(journals_file='journals.txt'):
+def load_journals_list(journals_file="journals.txt"):
     # ISSN REGEX
-    prog = re.compile('^[0-9]{4}-[0-9]{3}[0-9X]$')
+    prog = re.compile("^[0-9]{4}-[0-9]{3}[0-9X]$")
 
     issns = []
-    with open(journals_file, 'r') as f:
+    with open(journals_file, "r") as f:
         index = 0
         for line in f:
             index = index + 1
-            if not '#' in line.strip() and len(line.strip()) > 0:
+            if not "#" in line.strip() and len(line.strip()) > 0:
                 issn = line.strip().upper()
                 issn = prog.search(issn)
                 if issn:
                     issns.append(issn.group())
                 else:
-                    logging.debug("Please check you journal.txt file, the input '{0}' at line '{1}' is not a valid issn".format(line.strip(), index))
+                    logging.debug(
+                        "Please check you journal.txt file, the input '{0}' at line '{1}' is not a valid issn".format(
+                            line.strip(), index
+                        )
+                    )
 
     if len(issns) > 0:
         return issns
@@ -417,18 +437,14 @@ class XMLValidator(object):
 
     def __init__(self):
         xsd_filename = os.path.abspath(
-                            os.path.join(
-                                os.path.dirname(__file__),
-                                'xsd/Clarivate_publishing.xsd'))
+            os.path.join(os.path.dirname(__file__), "xsd/Clarivate_publishing.xsd")
+        )
         self.validator = XMLValidatorWithSchema(xsd_filename)
-        self.articlemeta_url = 'http://articlemeta.scielo.org/api/v1/article'
+        self.articlemeta_url = "http://articlemeta.scielo.org/api/v1/article"
 
     def _get_xml(self, collection, code):
-        params = {'collection': collection,
-                  'code': code,
-                  'format': 'xmlwos'}
-        return requests.get(
-            self.articlemeta_url, params=params, timeout=30).text
+        params = {"collection": collection, "code": code, "format": "xmlwos"}
+        return requests.get(self.articlemeta_url, params=params, timeout=30).text
 
     def validated_xml(self, textxml):
         validated = ValidatedXML(textxml)
@@ -446,10 +462,8 @@ class XMLValidator(object):
                 validated_xml = self.validated_xml(textxml)
 
         article_report = ArticleReport(
-                            self.articlemeta_url,
-                            collection,
-                            code,
-                            XML_ERRORS_ROOT_PATH)
+            self.articlemeta_url, collection, code, XML_ERRORS_ROOT_PATH
+        )
         article_report.save(validated_xml)
         if validated_xml.errors is None or len(validated_xml.errors) == 0:
             return validated_xml.tree
@@ -470,18 +484,15 @@ class XML(object):
         except etree.XMLSyntaxError as e:
             self.parse_errors.append(e.message)
         except Exception as e:
-            msg = 'tools.XML._parse_xml(): Unknown error. '
+            msg = "tools.XML._parse_xml(): Unknown error. "
             logging.exception(msg, e)
             self.parse_errors.append(msg)
 
     @property
     def pretty_text(self):
         if self.tree is None:
-            return self.text.replace('<', '\n<').replace('\n</', '</').strip()
-        return etree.tostring(
-                self.tree,
-                encoding='unicode',
-                pretty_print=True)
+            return self.text.replace("<", "\n<").replace("\n</", "</").strip()
+        return etree.tostring(self.tree, encoding="unicode", pretty_print=True)
 
 
 class XMLValidatorWithSchema(object):
@@ -496,29 +507,29 @@ class XMLValidatorWithSchema(object):
     @xml_schema.setter
     def xml_schema(self, xsd_filename):
         try:
-            with open(xsd_filename, 'r') as str_schema:
+            with open(xsd_filename, "r") as str_schema:
                 schema_doc = etree.parse(str_schema)
                 self._xml_schema = etree.XMLSchema(schema_doc)
         except (IOError, ValueError, etree.XMLSchemaError) as e:
-            logging.exception('tools.XMLValidatorWithSchema.xml_schema', e)
+            logging.exception("tools.XMLValidatorWithSchema.xml_schema", e)
 
     def validate(self, tree):
         if self.xml_schema is None:
-            return 'XMLSchema is not loaded'
+            return "XMLSchema is not loaded"
 
         try:
             self.xml_schema.validate(tree)
         except etree.XMLSyntaxError as e:
             return e.message
         except Exception as e:
-            logging.exception('tools.XMLValidatorWithSchema.validate', e)
+            logging.exception("tools.XMLValidatorWithSchema.validate", e)
 
         try:
             self.xml_schema.assertValid(tree)
         except etree.DocumentInvalid as e:
             return e.message
         except Exception as e:
-            logging.exception('tools.XMLValidatorWithSchema.assertValid', e)
+            logging.exception("tools.XMLValidatorWithSchema.assertValid", e)
 
 
 class ValidatedXML(object):
@@ -528,7 +539,7 @@ class ValidatedXML(object):
         self._original_xml = None
         self._pretty_xml = None
         if textxml is None:
-            self.errors = ['Empty XML']
+            self.errors = ["Empty XML"]
         else:
             self._original_xml = XML(textxml)
             self._pretty_xml = XML(self._original_xml.pretty_text)
@@ -554,18 +565,20 @@ class ValidatedXML(object):
     def validate(self, validate_with_schema=None):
         if len(self.errors) == 0:
             if validate_with_schema is not None:
-                self.errors = validate_with_schema.validate(
-                    self._pretty_xml.tree)
+                self.errors = validate_with_schema.validate(self._pretty_xml.tree)
 
     def display(self, numbered_lines=False):
         if self._original_xml is not None:
             if numbered_lines:
-                lines = self._original_xml.pretty_text.split('\n')
+                lines = self._original_xml.pretty_text.split("\n")
                 nlines = len(lines)
                 digits = len(str(nlines))
-                return '\n'.join(
-                    [u'{}:{}'.format(str(n).zfill(digits), line)
-                     for n, line in zip(range(1, nlines), lines)])
+                return "\n".join(
+                    [
+                        "{}:{}".format(str(n).zfill(digits), line)
+                        for n, line in zip(range(1, nlines), lines)
+                    ]
+                )
             return self._original_xml.pretty_text
 
 
@@ -575,16 +588,15 @@ class ArticleReport(object):
         self.collection = collection
         self.code = code
         self.xml_error_root_path = xml_error_root_path
-        self.report_filename = '{}/{}.err.txt'.format(
-            self.issn_path, self.code)
-        self.url = '{}/?collection={}&code={}&format=xmlwos\n'.format(
-                    article_uri, self.collection, self.code)
+        self.report_filename = "{}/{}.err.txt".format(self.issn_path, self.code)
+        self.url = "{}/?collection={}&code={}&format=xmlwos\n".format(
+            article_uri, self.collection, self.code
+        )
 
     @property
     def issn_path(self):
         issn = self.code[1:10]
-        path = '{}/{}/{}'.format(
-            self.xml_error_root_path, self.collection, issn)
+        path = "{}/{}/{}".format(self.xml_error_root_path, self.collection, issn)
         if not os.path.isdir(path):
             os.makedirs(path)
         return path
@@ -593,14 +605,14 @@ class ArticleReport(object):
         now = datetime.now().isoformat()
         if validated.errors is None or len(validated.errors) == 0:
             return delete_file_or_folder(self.report_filename)
-        errors = '\n'.join(validated.errors)
-        sep = '\n'*2
+        errors = "\n".join(validated.errors)
+        sep = "\n" * 2
         content = []
         xml = validated.display(numbered)
         if numbered:
-            content = [now, self.url, 'ERRORS\n'+'='*6, errors, '-'*30, xml]
+            content = [now, self.url, "ERRORS\n" + "=" * 6, errors, "-" * 30, xml]
         else:
-            content = [xml, '-'*30, now, self.url, 'ERRORS\n'+'='*6, errors]
+            content = [xml, "-" * 30, now, self.url, "ERRORS\n" + "=" * 6, errors]
 
         write_file(self.report_filename, sep.join(content))
 
@@ -609,10 +621,10 @@ class DataHandler(object):
 
     def __init__(
         self,
-        mongodb_host='localhost',
+        mongodb_host="localhost",
         mongodb_port=27017,
-        mongodb_database='articlemeta',
-        mongodb_collection='articles'
+        mongodb_database="articlemeta",
+        mongodb_collection="articles",
     ):
 
         db = MongoClient(mongodb_host)[mongodb_database]
@@ -622,58 +634,59 @@ class DataHandler(object):
 
     def _set_articles_coll(self, db):
 
-        coll = db['articles']
-        coll.ensure_index('publication_year')
-        coll.ensure_index('sent_wos')
-        coll.ensure_index('applicable')
+        coll = db["articles"]
+        coll.ensure_index("publication_year")
+        coll.ensure_index("sent_wos")
+        coll.ensure_index("applicable")
 
         return coll
 
     def _set_collections_coll(self, db):
 
-        coll = db['collections']
-        coll.ensure_index('code')
+        coll = db["collections"]
+        coll.ensure_index("code")
 
         return coll
 
     def load_pids_list_to_be_removed(self):
 
-        now = datetime.now().isoformat()[0:10].replace('-', '')
+        now = datetime.now().isoformat()[0:10].replace("-", "")
 
-        recorded_at = 'controller/SCIELO_DEL_{0}.del'.format(now)
+        recorded_at = "controller/SCIELO_DEL_{0}.del".format(now)
 
         toremove = []
 
-        with open(recorded_at, 'wb') as f:
-            for line in open('controller/takeoff.txt', 'r'):
+        with open(recorded_at, "wb") as f:
+            for line in open("controller/takeoff.txt", "r"):
                 sline = line.strip()
                 toremove.append(sline)
                 if len(sline) == 9:
-                    for reg in self._articles_coll.find({'code_title': sline}, {'code': 1}):
-                        f.write('SCIELO,{0},Y\r\n'.format(reg['code']))
+                    for reg in self._articles_coll.find(
+                        {"code_title": sline}, {"code": 1}
+                    ):
+                        f.write("SCIELO,{0},Y\r\n".format(reg["code"]))
                 else:
-                    f.write('SCIELO,{0},Y\r\n'.format(sline))
+                    f.write("SCIELO,{0},Y\r\n".format(sline))
 
             f.close()
 
         return toremove
 
-
     def sync_sent_documents(self, remove_origin=False):
 
-        with open('controller/validated_ids.txt', 'r') as f:
+        with open("controller/validated_ids.txt", "r") as f:
             for pid in f:
                 self._articles_coll.update(
-                    {'code': pid.strip()}, {'$set': {'sent_wos': 'True'}}, multi=True
+                    {"code": pid.strip()}, {"$set": {"sent_wos": "True"}}, multi=True
                 )
 
         if remove_origin:
-            os.remove('controller/validated_ids.txt')
+            os.remove("controller/validated_ids.txt")
 
     def mark_documents_as_sent_to_wos(self, pids):
         for pid in pids:
             self._articles_coll.update(
-                {'code': pid}, {'$set': {'sent_wos': 'True'}}, multi=True
+                {"code": pid}, {"$set": {"sent_wos": "True"}}, multi=True
             )
 
     def load_collections_metadata(self):
@@ -682,21 +695,24 @@ class DataHandler(object):
 
         dict_collections = {}
         for collection in collections:
-            dict_collections.setdefault(collection['code'], collection)
+            dict_collections.setdefault(collection["code"], collection)
 
         return dict_collections
 
     def set_elegible_document_types(self):
-        documents = self._articles_coll.find({'applicable': 'False'}, {'collection': 1, 'code': 1, 'article.v71': 1})
+        documents = self._articles_coll.find(
+            {"applicable": "False"}, {"collection": 1, "code": 1, "article.v71": 1}
+        )
 
         for document in documents:
 
-            if not 'v71' in document['article']:
+            if not "v71" in document["article"]:
                 continue
 
-            if document['article']['v71'][0]['_'] in wos_article_types:
+            if document["article"]["v71"][0]["_"] in wos_article_types:
                 self._articles_coll.update(
-                    {'collection': document['collection'], 'code': document['code']}, {'$set': {'applicable': 'True'}}
+                    {"collection": document["collection"], "code": document["code"]},
+                    {"$set": {"applicable": "True"}},
                 )
 
     def not_sent(self, wos_collections_allowed, code_title=None, publication_year=1800):
@@ -705,25 +721,33 @@ class DataHandler(object):
         sent_wos = False
         """
 
-        fltr = {'sent_wos': 'False',
-                'applicable': 'True',
-                'collection': {'$in': wos_collections_allowed},
-                'publication_year': {'$gte': str(publication_year)}}
+        fltr = {
+            "sent_wos": "False",
+            "applicable": "True",
+            "collection": {"$in": wos_collections_allowed},
+            "publication_year": {"$gte": str(publication_year)},
+        }
 
         if code_title:
-            fltr.update({'code_title': code_title})
-        logging.debug('Select documents: %s' % str(fltr))
+            fltr.update({"code_title": code_title})
+        logging.debug("Select documents: %s" % str(fltr))
         documents = []
         total = 0
-        for document in self._articles_coll.find(fltr, {'collection':1, 'code': 1}):
+        for document in self._articles_coll.find(fltr, {"collection": 1, "code": 1}):
             total += 1
-            documents.append([document['collection'], document['code']])
+            documents.append([document["collection"], document["code"]])
 
         i = 0
         for document in documents:
             i = i + 1
-            logging.debug('Selected document: %s' % str(document))
-            yield [total, i, self._articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
+            logging.debug("Selected document: %s" % str(document))
+            yield [
+                total,
+                i,
+                self._articles_coll.find_one(
+                    {"collection": document[0], "code": document[1]}, {"citations": 0}
+                ),
+            ]
 
     def sent_to_wos(self, code_title=None):
         """
@@ -731,52 +755,72 @@ class DataHandler(object):
         sent_wos = True
         """
 
-        fltr = {'sent_wos': 'True'}
+        fltr = {"sent_wos": "True"}
 
         if code_title:
-            fltr.update({'code_title': code_title})
+            fltr.update({"code_title": code_title})
 
         documents = []
         total = 0
-        for document in self._articles_coll.find(fltr, {'code': 1}):
+        for document in self._articles_coll.find(fltr, {"code": 1}):
             total += 1
-            documents.append([document['collection'], document['code']])
+            documents.append([document["collection"], document["code"]])
 
         i = 0
         for document in documents:
             i += 1
-            yield [total, i, self_articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
+            yield [
+                total,
+                i,
+                self_articles_coll.find_one(
+                    {"collection": document[0], "code": document[1]}, {"citations": 0}
+                ),
+            ]
 
-    def not_sent_with_proc_date(self, wos_collections_allowed, code_title=None, processing_date=None, publication_year=1800):
+    def not_sent_with_proc_date(
+        self,
+        wos_collections_allowed,
+        code_title=None,
+        processing_date=None,
+        publication_year=1800,
+    ):
         """
         Implements an iterable article PID list not validated on SciELO.
         sent_wos = False
         """
 
-        fltr = {'sent_wos': 'False',
-                'applicable': 'True',
-                'collection': {'$in': wos_collections_allowed},
-                'publication_year': {'$gte': str(publication_year)}}
+        fltr = {
+            "sent_wos": "False",
+            "applicable": "True",
+            "collection": {"$in": wos_collections_allowed},
+            "publication_year": {"$gte": str(publication_year)},
+        }
 
         if code_title:
-            fltr.update({'code_title': code_title})
+            fltr.update({"code_title": code_title})
         if processing_date:
             _processing_date = earlier_datetime(processing_date)
-            fltr.update({'processing_date': {'$gte': _processing_date}})
+            fltr.update({"processing_date": {"$gte": _processing_date}})
 
-        logging.debug('Select documents: %s' % str(fltr))
+        logging.debug("Select documents: %s" % str(fltr))
 
         documents = []
         total = 0
-        for document in self._articles_coll.find(fltr, {'collection':1, 'code': 1}):
+        for document in self._articles_coll.find(fltr, {"collection": 1, "code": 1}):
             total += 1
-            documents.append([document['collection'], document['code']])
+            documents.append([document["collection"], document["code"]])
 
         i = 0
         for document in documents:
             i = i + 1
-            logging.debug('Selected document: %s' % str(document))
-            yield [total, i, self._articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
+            logging.debug("Selected document: %s" % str(document))
+            yield [
+                total,
+                i,
+                self._articles_coll.find_one(
+                    {"collection": document[0], "code": document[1]}, {"citations": 0}
+                ),
+            ]
 
     def sent_to_wos_with_proc_date(self, code_title=None, processing_date=None):
         """
@@ -784,21 +828,27 @@ class DataHandler(object):
         sent_wos = True
         """
 
-        fltr = {'sent_wos': 'True'}
+        fltr = {"sent_wos": "True"}
 
         if code_title:
-            fltr.update({'code_title': code_title})
+            fltr.update({"code_title": code_title})
         if processing_date:
             _processing_date = earlier_datetime(processing_date)
-            fltr.update({'processing_date': {'$gte': _processing_date}})
+            fltr.update({"processing_date": {"$gte": _processing_date}})
 
         documents = []
         total = 0
-        for document in self._articles_coll.find(fltr, {'code': 1}):
+        for document in self._articles_coll.find(fltr, {"code": 1}):
             total += 1
-            documents.append([document['collection'], document['code']])
+            documents.append([document["collection"], document["code"]])
 
         i = 0
         for document in documents:
             i += 1
-            yield [total, i, self_articles_coll.find_one({'collection': document[0], 'code': document[1]}, {'citations': 0})]
+            yield [
+                total,
+                i,
+                self_articles_coll.find_one(
+                    {"collection": document[0], "code": document[1]}, {"citations": 0}
+                ),
+            ]
