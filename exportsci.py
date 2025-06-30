@@ -102,26 +102,30 @@ def run(task="add", clean_garbage=False, normalize=True):
 
         issns = tools.load_journals_list(journals_file="controller/keepinto.txt")
 
-    logger.debug("Remove previous inbound files")
-    tools.remove_previous_unbound_files_from_ftp(
-        ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD
-    )
+    # logger.debug("Remove previous inbound files")
+    # tools.remove_previous_unbound_files_from_ftp(ftp_host=FTP_HOST,
+    #                              user=FTP_USER,
+    #                              passwd=FTP_PASSWD)
 
-    logger.debug("Syncing XML's status according to WoS validated files")
-    tools.get_sync_file_from_ftp(ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD)
+    # logger.debug("Syncing XML's status according to WoS validated files")
+    # tools.get_sync_file_from_ftp(ftp_host=FTP_HOST,
+    #                              user=FTP_USER,
+    #                              passwd=FTP_PASSWD)
 
-    dh.sync_sent_documents(remove_origin=clean_garbage)
+    # dh.sync_sent_documents(remove_origin=clean_garbage)
 
-    logger.debug("Creating file with a list of documents to be removed from WoS")
-    tools.get_take_off_files_from_ftp(
-        ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD, remove_origin=clean_garbage
-    )
+    # logger.debug("Creating file with a list of documents to be removed from WoS")
+    # tools.get_take_off_files_from_ftp(ftp_host=FTP_HOST,
+    #                                   user=FTP_USER,
+    #                                   passwd=FTP_PASSWD,
+    #                                   remove_origin=clean_garbage)
 
-    ids_to_remove = dh.load_pids_list_to_be_removed()
+    # ids_to_remove = dh.load_pids_list_to_be_removed()
 
-    tools.send_take_off_files_to_ftp(
-        ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD, remove_origin=clean_garbage
-    )
+    # tools.send_take_off_files_to_ftp(ftp_host=FTP_HOST,
+    #                                  user=FTP_USER,
+    #                                  passwd=FTP_PASSWD,
+    #                                  remove_origin=clean_garbage)
 
     logger.debug("Defining document types elegible to send to SCI")
     dh.set_elegible_document_types()
@@ -143,6 +147,10 @@ def run(task="add", clean_garbage=False, normalize=True):
             )
             continue
 
+        issn_xml_path = "xml/{}".format(issn)
+        if not os.path.exists(issn_xml_path):
+            os.makedirs(issn_xml_path)
+
         proc_date_ctrl = ProcessingDateController(issn)
 
         if task == "update":
@@ -156,7 +164,7 @@ def run(task="add", clean_garbage=False, normalize=True):
             if documents is None:
                 documents = dh.sent_to_wos(issn)
 
-            xml_file_name = "xml/SciELO_COR_{0}_{1}.xml".format(now, issn)
+            xml_file_name = "{}/SciELO_COR_{}_{}.xml".format(issn_xml_path, issn, now)
         elif task == "add":
             try:
                 documents = dh.not_sent_with_proc_date(
@@ -171,7 +179,7 @@ def run(task="add", clean_garbage=False, normalize=True):
                 documents = dh.not_sent(
                     WOS_COLLECTIONS_ALLOWED, issn, publication_year=2002
                 )
-            xml_file_name = "xml/SciELO_{0}_{1}.xml".format(now, issn)
+            xml_file_name = "{}/SciELO_{}_{}.xml".format(issn_xml_path, issn, now)
 
         if os.path.exists(xml_file_name):
             logger.warning("File {0} already exists".format(xml_file_name))
@@ -190,12 +198,9 @@ def run(task="add", clean_garbage=False, normalize=True):
 
         pids = []
         for total, current, document in documents:
+            logger.info("{} - total xmls: {}".format(issn, total))
+
             try:
-                if current == 1:
-                    logger.info("validating xml's {0} for {1}".format(total, issn))
-
-                logger.info("validating xml {0}/{1}".format(current, total))
-
                 # skip ahead documents
                 if (
                     "v32" in document["article"]
@@ -217,29 +222,41 @@ def run(task="add", clean_garbage=False, normalize=True):
                     'unhandled exception during validation of "%s"', document["code"]
                 )
 
-        # Convertendo XML para texto
-        try:
-            textxml = etree.tostring(global_xml, encoding="utf-8", method="xml")
-        except:
-            pass
-
-        if len(global_xml.findall("article")) == 0:
+        if not pids:
+            logger.error("No valid xml")
             continue
 
-        xml_file = open(xml_file_name, "w")
-        xml_file.write(textxml)
-        xml_file.close()
+        # Convertendo XML para texto
+        logger.info("{} - total valid xmls: {}".format(issn, len(pids)))
+        try:
+            textxml = etree.tostring(global_xml, encoding="utf-8", method="xml")
+        except Exception as exc:
+            logger.error("Unable to generate XML {}: {}".format(xml_file_name, exc))
+            continue
+        else:
+            with open(xml_file_name, "w") as fp:
+                xml_file.write(textxml)
 
-        dh.mark_documents_as_sent_to_wos(pids)
+        try:
+            # zipping files
+            now = datetime.now().isoformat()[0:10]
+            zip_filename = "scielo_{}_{}.zip".format(now, issn)
+            zipped_file_name = tools.packing_zip(
+                xml_file_name, None, None, zip_filename
+            )
+        except Exception as exc:
+            logger.error("Unable to generate zip for {}: {}".format(xml_file_name, exc))
+            continue
 
-    # zipping files
-    files = os.listdir("xml")
-    zipped_file_name = tools.packing_zip(files)
+        try:
+            # sending to ftp.scielo.br
+            tools.send_to_ftp(
+                zipped_file_name, ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD
+            )
 
-    # sending to ftp.scielo.br
-    tools.send_to_ftp(
-        zipped_file_name, ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD
-    )
+            dh.mark_documents_as_sent_to_wos(pids)
+        except Exception as exc:
+            logger.error("Unable to ftp {}: {}".format(zipped_file_name, exc))
 
 
 def skip_because_of_processing_date(proc_date_ctrl, document):

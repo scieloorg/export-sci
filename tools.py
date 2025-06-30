@@ -254,7 +254,7 @@ def send_to_ftp(file_name, ftp_host="localhost", user="anonymous", passwd="anony
 
     ftp = ftp_connect(ftp_host=ftp_host, user=user, passwd=passwd)
     f = open("{0}".format(file_name), "rb")
-    ftp.storbinary("STOR inbound/{0}".format(target), f)
+    ftp.storbinary("STOR inbound/{0}".format(file_name), f)
     f.close()
     ftp.quit()
     logging.debug("file sent to ftp: %s" % target)
@@ -388,18 +388,21 @@ def get_take_off_files_from_ftp(
     f.close()
 
 
-def packing_zip(files):
+def packing_zip(xml_file=None, files=None, xml_folder_path=None, zip_filename=None):
     now = datetime.now().isoformat()[0:10]
 
-    target = "scielo_{0}.zip".format(now)
+    target = zip_filename or "scielo_{0}.zip".format(now)
 
     logging.info("zipping XML files to: %s" % target)
 
     with zipfile.ZipFile(
         target, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True
     ) as zipf:
-        for xml_file in files:
-            zipf.write("xml/{0}".format(xml_file), arcname=xml_file)
+        if xml_file:
+            zipf.write(xml_file, arcname=os.path.basename(xml_file))
+        elif files and xml_folder_path:
+            for xml_file in files:
+                zipf.write("{}/{}".format(xml_folder_path, xml_file), arcname=xml_file)
 
     logging.debug("Files zipped into: %s" % target)
 
@@ -700,20 +703,10 @@ class DataHandler(object):
         return dict_collections
 
     def set_elegible_document_types(self):
-        documents = self._articles_coll.find(
-            {"applicable": "False"}, {"collection": 1, "code": 1, "article.v71": 1}
+        return self._articles_coll.update_many(
+            {"applicable": "False", "article.v71.0._": {"$in": wos_article_types}},
+            {"$set": {"applicable": "True"}},
         )
-
-        for document in documents:
-
-            if not "v71" in document["article"]:
-                continue
-
-            if document["article"]["v71"][0]["_"] in wos_article_types:
-                self._articles_coll.update(
-                    {"collection": document["collection"], "code": document["code"]},
-                    {"$set": {"applicable": "True"}},
-                )
 
     def not_sent(self, wos_collections_allowed, code_title=None, publication_year=1800):
         """
@@ -838,7 +831,7 @@ class DataHandler(object):
 
         documents = []
         total = 0
-        for document in self._articles_coll.find(fltr, {"code": 1}):
+        for document in self._articles_coll.find(fltr, {"collection": 1, "code": 1}):
             total += 1
             documents.append([document["collection"], document["code"]])
 
