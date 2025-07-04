@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import argparse
 import logging
+import shutil
 
 import tools
 import utils
@@ -53,7 +54,23 @@ def _config_logging(logging_level="INFO", logging_file=None):
     return logger
 
 
-def run(task="add", clean_garbage=False, normalize=True):
+def run(collection, task="add", clean_garbage=False, normalize=True):
+    collection_issns = []
+    path = f"controller/{collection}.txt"
+    if not os.path.isfile(path):
+        template_path = f"controller.template/{collection}.txt"
+        if not os.path.isfile(template_path):
+            logger.error(f"Not found {path}")
+            logger.error(f"Not found {template_path}")
+            exit()
+        shutil.copyfile(template_path, path)
+
+    with open(f"controller/{collection}.txt", "r") as fp:
+        collection_issns = [item.strip() for item in fp.realines()]
+    if not collection_issns:
+        logger.info(f"No issns ({collection})")
+        exit()
+
     working_dir = os.listdir(".")
     logger.debug("Validating working directory %s" % working_dir)
     if not "controller" in working_dir:
@@ -74,7 +91,6 @@ def run(task="add", clean_garbage=False, normalize=True):
     dh = tools.DataHandler(MONGODB_HOST)
 
     now = datetime.now().isoformat()[0:10]
-    index_issn = 0
 
     collections = dh.load_collections_metadata()
 
@@ -136,16 +152,17 @@ def run(task="add", clean_garbage=False, normalize=True):
         os.makedirs("xml")
 
     # Loading XML files
-    for issn in issns:
-        index_issn = index_issn + 1
 
-        if issn in ids_to_remove:
-            logger.debug(
-                "Issn {0} is available in the takeoff and keepinto file. For now this ISSN was ignored, and will not be send to WoS until it is removed from the takeoff file.".format(
-                    issn
-                )
-            )
-            continue
+    valid_issns = set(issns) & set(collection_issns)
+    for issn in valid_issns:
+
+        # if issn in ids_to_remove:
+        #     logger.debug(
+        #         "Issn {0} is available in the takeoff and keepinto file. For now this ISSN was ignored, and will not be send to WoS until it is removed from the takeoff file.".format(
+        #             issn
+        #         )
+        #     )
+        #     continue
 
         issn_xml_path = "xml/{}".format(issn)
         if not os.path.exists(issn_xml_path):
@@ -327,6 +344,8 @@ def main():
         description="Control the process of sending metadata to WoS"
     )
 
+    parser.add_argument("collection", help="Collection acron")
+
     parser.add_argument(
         "-t",
         "--task",
@@ -362,4 +381,8 @@ def main():
 
     _config_logging(args.logging_level, args.logging_file)
     logging.debug("Export SciELOCI %s" % VERSION)
-    run(task=str(args.task), clean_garbage=bool(args.clean_garbage))
+    run(
+        collection=args.collection,
+        task=str(args.task),
+        clean_garbage=bool(args.clean_garbage),
+    )
