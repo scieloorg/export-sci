@@ -54,7 +54,7 @@ def _config_logging(logging_level="INFO", logging_file=None):
     return logger
 
 
-def run(collection, task="add", clean_garbage=False, normalize=True):
+def _get_collection_issns(collection):
     collection_issns = []
     path = f"controller/{collection}.txt"
     if not os.path.isfile(path):
@@ -70,29 +70,17 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
     if not collection_issns:
         logger.info(f"No issns ({collection})")
         exit()
+    return collection_issns
 
+
+def run(collection, task="add", clean_garbage=False, normalize=True):
+    required_dirs = ["controller", "reports", "xml"]
     working_dir = os.listdir(".")
     logger.debug("Validating working directory %s" % working_dir)
-    if not "controller" in working_dir:
-        logger.error("Working dir does not have controller directory")
-        exit()
-
-    if not "reports" in working_dir:
-        logger.error("Working dir does not have reports directory")
-        exit()
-
-    if not "xml" in working_dir:
-        logger.error("Working dir does not have xml directory")
-        exit()
-
-    # Setup a connection to SciELO Network Collection
-    logger.debug("Connecting to mongodb with DataHandler thru %s" % (MONGODB_HOST))
-
-    dh = tools.DataHandler(MONGODB_HOST)
-
-    now = datetime.now().isoformat()[0:10]
-
-    collections = dh.load_collections_metadata()
+    for d in required_dirs:
+        if d not in working_dir:
+            logger.error(f"Working dir does not have {d} directory")
+            exit()
 
     if clean_garbage:
         logger.debug("Removing previous XML files")
@@ -107,16 +95,24 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
         tools.get_to_update_file_from_ftp(
             ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD
         )
-
         issns = tools.load_journals_list(journals_file="controller/toupdate.txt")
-
     elif task == "add":
         logger.debug("Loading keepinto.txt ISSN's file from FTP controller directory")
         tools.get_keep_into_file_from_ftp(
             ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD
         )
-
         issns = tools.load_journals_list(journals_file="controller/keepinto.txt")
+
+    collection_issns = _get_collection_issns(collection)
+    valid_issns = set(issns) & set(collection_issns)
+    if not valid_issns:
+        logger.error(f"No valid issns to process")
+        exit()
+
+    # Setup a connection to SciELO Network Collection
+    logger.debug("Connecting to mongodb with DataHandler thru %s" % (MONGODB_HOST))
+    dh = tools.DataHandler(MONGODB_HOST)
+    collections = dh.load_collections_metadata()
 
     # logger.debug("Remove previous inbound files")
     # tools.remove_previous_unbound_files_from_ftp(ftp_host=FTP_HOST,
@@ -146,14 +142,12 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
     logger.debug("Defining document types elegible to send to SCI")
     dh.set_elegible_document_types()
 
-    xml_validator = tools.XMLValidator()
-
     if not os.path.exists("xml"):
         os.makedirs("xml")
+    xml_validator = tools.XMLValidator()
+    now = datetime.now().isoformat()[0:10]
 
     # Loading XML files
-
-    valid_issns = set(issns) & set(collection_issns)
     for issn in valid_issns:
 
         # if issn in ids_to_remove:
