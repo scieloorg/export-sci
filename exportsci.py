@@ -142,8 +142,6 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
     logger.debug("Defining document types elegible to send to SCI")
     dh.set_elegible_document_types()
 
-    if not os.path.exists("xml"):
-        os.makedirs("xml")
     xml_validator = tools.XMLValidator()
     now = datetime.now().isoformat()[0:10]
 
@@ -158,7 +156,12 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
         #     )
         #     continue
 
-        issn_xml_path = "xml/{}".format(issn)
+        folders = [
+            "xml",
+            collection,
+            issn,
+        ]
+        issn_xml_path = "/".join(folders)
         if not os.path.exists(issn_xml_path):
             os.makedirs(issn_xml_path)
 
@@ -176,12 +179,12 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
                 documents = dh.sent_to_wos(issn)
 
             xml_file_name = "{}/SciELO_COR_{}_{}.xml".format(issn_xml_path, issn, now)
+            pids_filename = "{}/pids_COR_{}_{}.txt".format(issn_xml_path, issn, now)
         elif task == "add":
             try:
                 documents = dh.not_sent_with_proc_date(
                     WOS_COLLECTIONS_ALLOWED,
                     issn,
-                    proc_date_ctrl.from_date,
                     publication_year=2002,
                 )
             except:
@@ -191,10 +194,7 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
                     WOS_COLLECTIONS_ALLOWED, issn, publication_year=2002
                 )
             xml_file_name = "{}/SciELO_{}_{}.xml".format(issn_xml_path, issn, now)
-
-        if os.path.exists(xml_file_name):
-            logger.warning("File {0} already exists".format(xml_file_name))
-            continue
+            pids_filename = "{}/pids_{}_{}.txt".format(issn_xml_path, issn, now)
 
         nsmap = {
             "xml": "http://www.w3.org/XML/1998/namespace",
@@ -219,8 +219,6 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
                 ):
                     continue
 
-                if skip_because_of_processing_date(proc_date_ctrl, document):
-                    continue
                 xml = xml_validator.validate_xml(
                     document["collection"], document["code"]
                 )
@@ -264,10 +262,13 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
             tools.send_to_ftp(
                 zipped_file_name, ftp_host=FTP_HOST, user=FTP_USER, passwd=FTP_PASSWD
             )
-
-            dh.mark_documents_as_sent_to_wos(pids)
         except Exception as exc:
             logger.error("Unable to ftp {}: {}".format(zipped_file_name, exc))
+        else:
+            dh.mark_documents_as_sent_to_wos(pids)
+            with open(pids_filename, "w") as fp:
+                fp.write("\n".join(pids))
+            shutil.move(zipped_file_name, "zips")
 
 
 def skip_because_of_processing_date(proc_date_ctrl, document):
