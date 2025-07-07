@@ -56,19 +56,19 @@ def _config_logging(logging_level="INFO", logging_file=None):
 
 def _get_collection_issns(collection):
     collection_issns = []
-    path = f"controller/{collection}.txt"
+    path = "controller/{}.txt".format(collection)
     if not os.path.isfile(path):
-        template_path = f"controller.template/{collection}.txt"
+        template_path = "controller.template/{}.txt".format(collection)
         if not os.path.isfile(template_path):
-            logger.error(f"Not found {path}")
-            logger.error(f"Not found {template_path}")
+            logger.error("Not found {}".format(path))
+            logger.error("Not found {}".format(template_path))
             exit()
         shutil.copyfile(template_path, path)
 
-    with open(f"controller/{collection}.txt", "r") as fp:
-        collection_issns = [item.strip() for item in fp.realines()]
+    with open(path, "r") as fp:
+        collection_issns = [item.strip() for item in fp.readlines()]
     if not collection_issns:
-        logger.info(f"No issns ({collection})")
+        logger.info("No issns ({})".format(collection))
         exit()
     return collection_issns
 
@@ -79,7 +79,7 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
     logger.debug("Validating working directory %s" % working_dir)
     for d in required_dirs:
         if d not in working_dir:
-            logger.error(f"Working dir does not have {d} directory")
+            logger.error("Working dir does not have {} directory".format(d))
             exit()
 
     if clean_garbage:
@@ -106,7 +106,7 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
     collection_issns = _get_collection_issns(collection)
     valid_issns = set(issns) & set(collection_issns)
     if not valid_issns:
-        logger.error(f"No valid issns to process")
+        logger.error("No valid issns to process")
         exit()
 
     # Setup a connection to SciELO Network Collection
@@ -243,8 +243,8 @@ def run(collection, task="add", clean_garbage=False, normalize=True):
             logger.error("Unable to generate XML {}: {}".format(xml_file_name, exc))
             continue
         else:
-            with open(xml_file_name, "w") as fp:
-                xml_file.write(textxml)
+            with open(xml_file_name, "wb") as fp:
+                fp.write(textxml)
 
         try:
             # zipping files
