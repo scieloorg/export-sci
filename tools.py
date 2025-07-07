@@ -755,7 +755,7 @@ class DataHandler(object):
 
         documents = []
         total = 0
-        for document in self._articles_coll.find(fltr, {"code": 1}):
+        for document in self._articles_coll.find(fltr, {"code": 1, "collection": 1}):
             total += 1
             documents.append([document["collection"], document["code"]])
 
@@ -822,7 +822,6 @@ class DataHandler(object):
         """
 
         fltr = {"sent_wos": "True"}
-
         if code_title:
             fltr.update({"code_title": code_title})
         if processing_date:
