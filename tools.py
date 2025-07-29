@@ -765,7 +765,7 @@ class DataHandler(object):
             yield [
                 total,
                 i,
-                self_articles_coll.find_one(
+                self._articles_coll.find_one(
                     {"collection": document[0], "code": document[1]}, {"citations": 0}
                 ),
             ]
@@ -840,7 +840,7 @@ class DataHandler(object):
             yield [
                 total,
                 i,
-                self_articles_coll.find_one(
+                self._articles_coll.find_one(
                     {"collection": document[0], "code": document[1]}, {"citations": 0}
                 ),
             ]
